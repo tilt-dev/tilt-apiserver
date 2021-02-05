@@ -1,3 +1,4 @@
+
 /*
 
 
@@ -14,22 +15,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+// Api versions allow the api contract for a resource to be changed while keeping
+// backward compatibility by support multiple concurrent versions
+// of the same resource
 
-import (
-	"k8s.io/klog"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder"
+// +k8s:openapi-gen=true
+// +k8s:deepcopy-gen=package,register
+// +k8s:conversion-gen=github.com/tilt-dev/tilt-apiserver/pkg/apis/core
+// +k8s:defaulter-gen=TypeMeta
+// +groupName=core.tilt.dev
+package v1alpha1 // import "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 
-	// +kubebuilder:scaffold:resource-imports
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-)
-
-func main() {
-	err := builder.APIServer.
-		// +kubebuilder:scaffold:resource-register
-		WithResource(&corev1alpha1.Manifest{}).
-		Execute()
-	if err != nil {
-		klog.Fatal(err)
-	}
-}

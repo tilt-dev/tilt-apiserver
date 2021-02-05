@@ -1,3 +1,4 @@
+
 /*
 
 
@@ -14,22 +15,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
 
-import (
-	"k8s.io/klog"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder"
+// +k8s:deepcopy-gen=package,register
+// +groupName=core.tilt.dev
 
-	// +kubebuilder:scaffold:resource-imports
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-)
+// Package api is the internal version of the API.
+package core
 
-func main() {
-	err := builder.APIServer.
-		// +kubebuilder:scaffold:resource-register
-		WithResource(&corev1alpha1.Manifest{}).
-		Execute()
-	if err != nil {
-		klog.Fatal(err)
-	}
-}

@@ -14,22 +14,24 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package v1alpha1
 
 import (
-	"k8s.io/klog"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder"
-
-	// +kubebuilder:scaffold:resource-imports
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-func main() {
-	err := builder.APIServer.
-		// +kubebuilder:scaffold:resource-register
-		WithResource(&corev1alpha1.Manifest{}).
-		Execute()
-	if err != nil {
-		klog.Fatal(err)
-	}
+var AddToScheme = func(scheme *runtime.Scheme) error {
+	metav1.AddToGroupVersion(scheme, schema.GroupVersion{
+		Group:   "core.tilt.dev",
+		Version: "v1alpha1",
+	})
+	// +kubebuilder:scaffold:install
+
+	scheme.AddKnownTypes(schema.GroupVersion{
+		Group:   "core.tilt.dev",
+		Version: "v1alpha1",
+	}, &Manifest{}, &ManifestList{})
+	return nil
 }
