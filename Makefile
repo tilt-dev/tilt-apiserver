@@ -23,7 +23,7 @@ manager: generate fmt vet
 
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run -mod vendor ./main.go
+	go run -mod vendor ./cmd/apiserver
 
 # Install CRDs into a cluster
 install: manifests kustomize

@@ -10,6 +10,7 @@ import (
 // the apiserver won't failing upon missing delegated auth configurations.
 func (a *Server) SetDelegateAuthOptional() *Server {
 	server.ServerOptionsFns = append(server.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
+		o.RecommendedOptions.Etcd = nil
 		o.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true
 		o.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
 		return o

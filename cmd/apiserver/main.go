@@ -25,10 +25,13 @@ import (
 )
 
 func main() {
-	err := builder.APIServer.
+	builder := builder.APIServer.
 		// +kubebuilder:scaffold:resource-register
 		WithResource(&corev1alpha1.Manifest{}).
-		Execute()
+		SetDelegateAuthOptional().
+		WithLocalDebugExtension()
+
+	err := builder.Execute()
 	if err != nil {
 		klog.Fatal(err)
 	}
