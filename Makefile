@@ -21,9 +21,13 @@ test: generate fmt vet manifests
 manager: generate fmt vet
 	go build -mod vendor -o bin/manager main.go
 
+# Run the apiserver locally
+run-apiserver: generate
+	go run ./cmd/apiserver/main.go --secure-port=9443 --bind-address=127.0.0.1 --standalone-debug-mode
+
 # Run against the configured Kubernetes cluster in ~/.kube/config
 run: generate fmt vet manifests
-	go run -mod vendor ./cmd/apiserver
+	go run -mod vendor ./main.go
 
 # Install CRDs into a cluster
 install: manifests kustomize

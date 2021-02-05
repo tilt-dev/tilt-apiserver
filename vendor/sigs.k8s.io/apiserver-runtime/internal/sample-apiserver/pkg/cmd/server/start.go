@@ -22,10 +22,13 @@ import (
 	"net"
 
 	"github.com/spf13/cobra"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apiserver/pkg/registry/generic"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
+	"k8s.io/apiserver/pkg/storage/storagebackend"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
 )
@@ -36,24 +39,25 @@ import (
 // WardleServerOptions contains state for master/api server
 type WardleServerOptions struct {
 	RecommendedOptions *genericoptions.RecommendedOptions
+	Codec              runtime.Codec
 
 	StdOut io.Writer
 	StdErr io.Writer
 }
 
 // NewWardleServerOptions returns a new WardleServerOptions
-func NewWardleServerOptions(out, errOut io.Writer, versions ...schema.GroupVersion) *WardleServerOptions {
+func NewWardleServerOptions(out, errOut io.Writer, codec runtime.Codec) *WardleServerOptions {
 	// change: apiserver-runtime
 	o := &WardleServerOptions{
 		RecommendedOptions: genericoptions.NewRecommendedOptions(
 			getEctdPath(),
-			apiserver.Codecs.LegacyCodec(versions...),
+			codec,
 		),
+		Codec: codec,
 
 		StdOut: out,
 		StdErr: errOut,
 	}
-	o.RecommendedOptions.Etcd.StorageConfig.EncodeVersioner = schema.GroupVersions(versions)
 	return o
 }
 
@@ -143,11 +147,22 @@ func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 		return nil, err
 	}
 
+	serverConfig.RESTOptionsGetter = o
+
 	config := &apiserver.Config{
 		GenericConfig: serverConfig,
 		ExtraConfig:   apiserver.ExtraConfig{},
 	}
+
 	return config, nil
+}
+
+func (o WardleServerOptions) GetRESTOptions(resource schema.GroupResource) (generic.RESTOptions, error) {
+	return generic.RESTOptions{
+		StorageConfig: &storagebackend.Config{
+			Codec: o.Codec,
+		},
+	}, nil
 }
 
 // RunWardleServer starts a new WardleServer given WardleServerOptions

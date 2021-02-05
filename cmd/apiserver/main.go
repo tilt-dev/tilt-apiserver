@@ -22,12 +22,13 @@ import (
 
 	// +kubebuilder:scaffold:resource-imports
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
 )
 
 func main() {
 	builder := builder.APIServer.
 		// +kubebuilder:scaffold:resource-register
-		WithResource(&corev1alpha1.Manifest{}).
+		WithResourceAndHandler(&corev1alpha1.Manifest{}, filepath.NewJSONFilepathStorageProvider(&corev1alpha1.Manifest{}, "data")).
 		SetDelegateAuthOptional().
 		WithLocalDebugExtension()
 

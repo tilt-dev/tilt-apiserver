@@ -84,7 +84,9 @@ func (a *Server) Build() (*Command, error) {
 	if len(a.errs) != 0 {
 		return nil, errs{list: a.errs}
 	}
-	o := server.NewWardleServerOptions(os.Stdout, os.Stderr, a.orderedGroupVersions...)
+
+	codec := apiserver.Codecs.LegacyCodec(a.orderedGroupVersions...)
+	o := server.NewWardleServerOptions(os.Stdout, os.Stderr, codec)
 	cmd := server.NewCommandStartServer(o, genericapiserver.SetupSignalHandler())
 	server.ApplyFlagsFns(cmd.Flags())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
