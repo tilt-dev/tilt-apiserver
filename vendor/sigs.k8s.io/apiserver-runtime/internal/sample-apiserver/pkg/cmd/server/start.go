@@ -25,6 +25,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/apiserver/pkg/endpoints/openapi"
 	"k8s.io/apiserver/pkg/registry/generic"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
@@ -139,9 +140,9 @@ func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 	// change: apiserver-runtime
 	// OpenAPIConfig set through ApplyRecommendedConfigFns by calling SetOpenAPIDefinitions
 	//
-	// serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
-	// serverConfig.OpenAPIConfig.Info.Title = "Wardle"
-	// serverConfig.OpenAPIConfig.Info.Version = "0.1"
+	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
+	serverConfig.OpenAPIConfig.Info.Title = "Tilt"
+	serverConfig.OpenAPIConfig.Info.Version = "0.1"
 
 	if err := o.RecommendedOptions.ApplyTo(serverConfig); err != nil {
 		return nil, err

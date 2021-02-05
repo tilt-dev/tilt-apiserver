@@ -29,6 +29,7 @@ import (
 
 	controllers "github.com/tilt-dev/tilt-apiserver/controllers/core"
 	manifests "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	_ "k8s.io/code-generator"
 	// +kubebuilder:scaffold:imports
 )
 
