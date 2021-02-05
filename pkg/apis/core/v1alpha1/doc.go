@@ -1,4 +1,3 @@
-
 /*
 
 
@@ -25,4 +24,3 @@ limitations under the License.
 // +k8s:defaulter-gen=TypeMeta
 // +groupName=core.tilt.dev
 package v1alpha1 // import "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-

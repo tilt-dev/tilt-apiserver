@@ -1,4 +1,3 @@
-
 /*
 
 
@@ -21,7 +20,7 @@ import (
 	"context"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
- 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource"
@@ -44,7 +43,7 @@ type Manifest struct {
 // ManifestList
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 type ManifestList struct {
-	metav1.TypeMeta   `json:",inline"`
+	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 
 	Items []Manifest `json:"items"`
@@ -95,6 +94,7 @@ var _ resource.ObjectList = &ManifestList{}
 func (in *ManifestList) GetListMeta() *metav1.ListMeta {
 	return &in.ListMeta
 }
+
 // ManifestStatus defines the observed state of Manifest
 type ManifestStatus struct {
 }
