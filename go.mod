@@ -1,10 +1,9 @@
-
 module github.com/tilt-dev/tilt-apiserver
 
 go 1.15
 
 require (
-	github.com/go-logr/logr v0.2.1 // indirect
+	github.com/go-logr/logr v0.2.1
 	github.com/go-logr/zapr v0.2.0 // indirect
 	k8s.io/apimachinery v0.19.2
 	k8s.io/client-go v0.19.2
