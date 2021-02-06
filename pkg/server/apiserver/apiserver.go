@@ -93,7 +93,7 @@ func (cfg *Config) Complete() CompletedConfig {
 
 // New returns a new instance of WardleServer from the given config.
 func (c completedConfig) New() (*WardleServer, error) {
-	genericServer, err := c.GenericConfig.New("sample-apiserver", genericapiserver.NewEmptyDelegate())
+	genericServer, err := c.GenericConfig.New("tilt-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return nil, err
 	}

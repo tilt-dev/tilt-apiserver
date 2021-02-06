@@ -1,0 +1,1 @@
+{"kind":"Manifest","apiVersion":"core.tilt.dev/v1alpha1","metadata":{"name":"my-server","creationTimestamp":null},"spec":{},"status":{}}

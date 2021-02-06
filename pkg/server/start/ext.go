@@ -14,14 +14,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package server
+package start
 
 import (
 	"github.com/spf13/pflag"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"k8s.io/apiserver/pkg/endpoints/openapi"
 	pkgserver "k8s.io/apiserver/pkg/server"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
 )
 
 var (
@@ -66,5 +66,5 @@ func SetOpenAPIDefinitions(name, version string, defs openapicommon.GetOpenAPIDe
 
 func getEctdPath() string {
 	// TODO: make this configurable
-	return "/registry/sample-apiserver"
+	return "/registry/tilt-apiserver"
 }

@@ -19,8 +19,9 @@ package rest
 import (
 	"context"
 
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource/resourcestrategy"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/labels"
@@ -29,7 +30,6 @@ import (
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage"
 	"k8s.io/apiserver/pkg/storage/names"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource"
 )
 
 // Strategy defines functions that are invoked prior to storing a Kubernetes resource.

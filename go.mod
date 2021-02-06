@@ -5,11 +5,16 @@ go 1.15
 require (
 	github.com/go-logr/logr v0.2.1
 	github.com/go-logr/zapr v0.2.0 // indirect
+	github.com/go-openapi/spec v0.19.3
+	github.com/spf13/cobra v1.0.0
+	github.com/spf13/pflag v1.0.5
+	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2
 	k8s.io/apiserver v0.19.2
 	k8s.io/client-go v0.19.2
 	k8s.io/code-generator v0.20.2
 	k8s.io/klog v1.0.0
+	k8s.io/kube-openapi v0.0.0-20201113171705-d219536bb9fd
 	sigs.k8s.io/apiserver-runtime v0.0.0-20201103144618-b52895ea8337
 	sigs.k8s.io/controller-runtime v0.6.0
 )

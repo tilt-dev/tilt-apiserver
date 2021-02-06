@@ -2,7 +2,7 @@
 all: test
 
 # Run tests
-test: generate fmt vet manifests
+test: verify-generate
 	go test ./... -mod vendor
 
 # Run the apiserver locally
@@ -24,3 +24,6 @@ vet:
 # Generate code
 generate: pkg/apis/core/v1alpha1/manifest_types.go hack/update-codegen.sh
 	hack/update-codegen.sh
+
+verify-generate:
+	hack/verify-codegen.sh

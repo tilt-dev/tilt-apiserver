@@ -5,10 +5,10 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/registry/generic"
 	regsitryrest "k8s.io/apiserver/pkg/registry/rest"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/rest"
 )
 
 // singletonProvider ensures different versions of the same resource share storage

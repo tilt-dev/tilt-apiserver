@@ -1,6 +1,12 @@
 local_resource(
+  'generate',
+  cmd='make generate',
+  deps=['./pkg/apis/core/v1alpha1/manifest_types.go'])
+
+local_resource(
   'apiserver',
-  serve_cmd='make run-apiserver')
+  serve_cmd='make run-apiserver',
+  resource_deps=['generate'])
 
 local_resource(
   'kubectl-get',

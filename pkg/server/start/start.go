@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package server
+package start
 
 import (
 	"fmt"
@@ -22,6 +22,8 @@ import (
 	"net"
 
 	"github.com/spf13/cobra"
+	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -31,7 +33,6 @@ import (
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
 )
 
 // change: apiserver-runtime
@@ -140,7 +141,7 @@ func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 	// change: apiserver-runtime
 	// OpenAPIConfig set through ApplyRecommendedConfigFns by calling SetOpenAPIDefinitions
 	//
-	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(sampleopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
+	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(tiltopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
 	serverConfig.OpenAPIConfig.Info.Title = "Tilt"
 	serverConfig.OpenAPIConfig.Info.Version = "0.1"
 

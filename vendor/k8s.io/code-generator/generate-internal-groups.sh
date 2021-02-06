@@ -112,8 +112,6 @@ fi
 
 if [ "${GENS}" = "all" ] || grep -qw "openapi" <<<"${GENS}"; then
   echo "Generating OpenAPI definitions for ${GROUPS_WITH_VERSIONS} at ${OUTPUT_PKG}/openapi"
-  set -ex
-  echo $(pwd)
   declare -a OPENAPI_EXTRA_PACKAGES
   "${GOPATH}/bin/openapi-gen" \
            --input-dirs "$(codegen::join , "${EXT_FQ_APIS[@]}" "${OPENAPI_EXTRA_PACKAGES[@]}")" \

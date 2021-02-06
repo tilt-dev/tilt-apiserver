@@ -3,14 +3,14 @@ package builder
 import (
 	"fmt"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcerest"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	regsitryrest "k8s.io/apiserver/pkg/registry/rest"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource/resourcerest"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource/resourcestrategy"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/rest"
 )
 
 // WithResource registers the resource with the apiserver.

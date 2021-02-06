@@ -2,13 +2,13 @@ package builder
 
 import (
 	"github.com/spf13/pflag"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/cmd/server"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 )
 
 // WithOptionsFns sets functions to customize the ServerOptions used to create the apiserver
 func (a *Server) WithOptionsFns(fns ...func(*ServerOptions) *ServerOptions) *Server {
-	server.ServerOptionsFns = append(server.ServerOptionsFns, fns...)
+	start.ServerOptionsFns = append(start.ServerOptionsFns, fns...)
 	return a
 }
 
@@ -20,6 +20,6 @@ func (a *Server) WithServerFns(fns ...func(server *GenericAPIServer) *GenericAPI
 
 // WithFlagFns sets functions to customize the flags for the compiled binary.
 func (a *Server) WithFlagFns(fns ...func(set *pflag.FlagSet) *pflag.FlagSet) *Server {
-	server.FlagsFns = append(server.FlagsFns, fns...)
+	start.FlagsFns = append(start.FlagsFns, fns...)
 	return a
 }

@@ -2,14 +2,14 @@ package builder
 
 import (
 	"github.com/spf13/pflag"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 	"k8s.io/klog"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/cmd/server"
 )
 
 // SetDelegateAuthOptional makes delegated authentication and authorization optional, otherwise
 // the apiserver won't failing upon missing delegated auth configurations.
 func (a *Server) SetDelegateAuthOptional() *Server {
-	server.ServerOptionsFns = append(server.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
+	start.ServerOptionsFns = append(start.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
 		o.RecommendedOptions.Etcd = nil
 		o.RecommendedOptions.Authentication.RemoteKubeConfigFileOptional = true
 		o.RecommendedOptions.Authorization.RemoteKubeConfigFileOptional = true
@@ -20,7 +20,7 @@ func (a *Server) SetDelegateAuthOptional() *Server {
 
 // DisableAuthorization disables delegated authentication and authorization
 func (a *Server) DisableAuthorization() *Server {
-	server.ServerOptionsFns = append(server.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
+	start.ServerOptionsFns = append(start.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
 		o.RecommendedOptions.Authorization = nil
 		return o
 	})
@@ -34,7 +34,7 @@ var enablesLocalStandaloneDebugging bool
 // also be added the binary which forcily requires "--bind-address" to be "127.0.0.1" in order to avoid
 // security issues.
 func (a *Server) WithLocalDebugExtension() *Server {
-	server.ServerOptionsFns = append(server.ServerOptionsFns, func(options *ServerOptions) *ServerOptions {
+	start.ServerOptionsFns = append(start.ServerOptionsFns, func(options *ServerOptions) *ServerOptions {
 		secureBindingAddr := options.RecommendedOptions.SecureServing.BindAddress.String()
 		if enablesLocalStandaloneDebugging {
 			if secureBindingAddr != "127.0.0.1" {
@@ -46,7 +46,7 @@ func (a *Server) WithLocalDebugExtension() *Server {
 		}
 		return options
 	})
-	server.FlagsFns = append(server.FlagsFns, func(fs *pflag.FlagSet) *pflag.FlagSet {
+	start.FlagsFns = append(start.FlagsFns, func(fs *pflag.FlagSet) *pflag.FlagSet {
 		fs.BoolVar(&enablesLocalStandaloneDebugging, "standalone-debug-mode", false,
 			"Under the local-debug mode the apiserver will allow all access to its resources without "+
 				"authorizing the requests, this flag is only intended for debugging in your workstation "+

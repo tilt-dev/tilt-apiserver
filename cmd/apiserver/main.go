@@ -17,8 +17,8 @@ limitations under the License.
 package main
 
 import (
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
 	"k8s.io/klog"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder"
 
 	// +kubebuilder:scaffold:resource-imports
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"

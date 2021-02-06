@@ -20,13 +20,13 @@ import (
 	"flag"
 	"os"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
 	genericapiserver "k8s.io/apiserver/pkg/server"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/apiserver"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/cmd/server"
 )
 
 // APIServer builds an apiserver to server Kubernetes resources and sub resources.
@@ -86,9 +86,9 @@ func (a *Server) Build() (*Command, error) {
 	}
 
 	codec := apiserver.Codecs.LegacyCodec(a.orderedGroupVersions...)
-	o := server.NewWardleServerOptions(os.Stdout, os.Stderr, codec)
-	cmd := server.NewCommandStartServer(o, genericapiserver.SetupSignalHandler())
-	server.ApplyFlagsFns(cmd.Flags())
+	o := start.NewWardleServerOptions(os.Stdout, os.Stderr, codec)
+	cmd := start.NewCommandStartServer(o, genericapiserver.SetupSignalHandler())
+	start.ApplyFlagsFns(cmd.Flags())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
 	return cmd, nil
 }

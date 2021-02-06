@@ -32,7 +32,7 @@ bash "${CODEGEN_PKG}/generate-groups.sh" all \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
   --go-header-file "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
 
-bash "${CODEGEN_PKG}/generate-internal-groups.sh" "deepcopy,defaulter,conversion,openapi" \
+bash "${CODEGEN_PKG}/generate-internal-groups.sh" "deepcopy,defaulter,openapi" \
   github.com/tilt-dev/tilt-apiserver/pkg/generated github.com/tilt-dev/tilt-apiserver/pkg/apis github.com/tilt-dev/tilt-apiserver/pkg/apis \
   "core:v1alpha1" \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \

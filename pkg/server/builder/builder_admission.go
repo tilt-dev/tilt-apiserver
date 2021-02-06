@@ -1,10 +1,10 @@
 package builder
 
-import "sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/cmd/server"
+import "github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 
 // DisableAdmissionControllers disables delegated authentication and authorization
 func (a *Server) DisableAdmissionControllers() *Server {
-	server.ServerOptionsFns = append(server.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
+	start.ServerOptionsFns = append(start.ServerOptionsFns, func(o *ServerOptions) *ServerOptions {
 		o.RecommendedOptions.Admission = nil
 		return o
 	})

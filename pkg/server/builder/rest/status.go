@@ -19,10 +19,10 @@ package rest
 import (
 	"context"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/util"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource/util"
 )
 
 var _ Strategy = StatusSubResourceStrategy{}

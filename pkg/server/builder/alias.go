@@ -18,18 +18,18 @@ package builder
 
 import (
 	"github.com/spf13/cobra"
+	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 	"k8s.io/apiserver/pkg/registry/rest"
 	pkgserver "k8s.io/apiserver/pkg/server"
 	"k8s.io/kube-openapi/pkg/common"
-	"sigs.k8s.io/apiserver-runtime/internal/sample-apiserver/pkg/cmd/server"
-	builderrest "sigs.k8s.io/apiserver-runtime/pkg/builder/rest"
 )
 
 // GenericAPIServer is an alias for pkgserver.GenericAPIServer
 type GenericAPIServer = pkgserver.GenericAPIServer
 
 // ServerOptions is an alias for server.ServerOptions
-type ServerOptions = server.ServerOptions
+type ServerOptions = start.ServerOptions
 
 // OpenAPIDefinition is an alias for common.OpenAPIDefinition
 type OpenAPIDefinition = common.OpenAPIDefinition
