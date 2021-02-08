@@ -8,7 +8,7 @@ test:
 
 # Run the apiserver locally
 run-apiserver:
-	go run ./cmd/apiserver/main.go --secure-port=9443 --bind-address=127.0.0.1 --standalone-debug-mode
+	go run ./cmd/apiserver/main.go --insecure-port=9443
 
 vendor:
 	go mod vendor
