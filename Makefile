@@ -1,8 +1,9 @@
+.PHONY: vendor
 
 all: test
 
 # Run tests
-test: verify-generate
+test:
 	go test ./... -mod vendor
 
 # Run the apiserver locally
@@ -11,7 +12,6 @@ run-apiserver:
 
 vendor:
 	go mod vendor
-	go mod tidy
 
 # Run go fmt against code
 fmt:

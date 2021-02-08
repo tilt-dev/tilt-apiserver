@@ -8,13 +8,17 @@ require (
 	github.com/go-openapi/spec v0.19.3
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
+	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b // indirect
+	golang.org/x/text v0.3.4 // indirect
 	k8s.io/api v0.19.2
 	k8s.io/apimachinery v0.19.2
 	k8s.io/apiserver v0.19.2
 	k8s.io/client-go v0.19.2
-	k8s.io/code-generator v0.20.2
+	k8s.io/code-generator v0.19.2
 	k8s.io/klog v1.0.0
+	k8s.io/klog/v2 v2.4.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20201113171705-d219536bb9fd
 	sigs.k8s.io/apiserver-runtime v0.0.0-20201103144618-b52895ea8337
 	sigs.k8s.io/controller-runtime v0.6.0
 )
+
