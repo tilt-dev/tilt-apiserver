@@ -35,6 +35,7 @@ import (
 //       Build()
 func NewJSONFilepathStorageProvider(obj resource.Object, rootPath string) builderrest.ResourceHandlerProvider {
 	return func(scheme *runtime.Scheme, getter generic.RESTOptionsGetter) (rest.Storage, error) {
+		strategy := NewStrategy(scheme, obj)
 		gr := obj.GetGroupVersionResource().GroupResource()
 		opt, err := getter.GetRESTOptions(gr)
 		if err != nil {
@@ -42,10 +43,10 @@ func NewJSONFilepathStorageProvider(obj resource.Object, rootPath string) builde
 		}
 		codec := opt.StorageConfig.Codec
 		return NewFilepathREST(
+			strategy,
 			gr,
 			codec,
 			rootPath,
-			obj.NamespaceScoped(),
 			obj.New,
 			obj.NewList,
 		), nil

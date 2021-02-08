@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,10 +36,10 @@ var _ rest.Storage = &filepathREST{}
 
 // NewFilepathREST instantiates a new REST storage.
 func NewFilepathREST(
+	strategy rest.RESTCreateStrategy,
 	groupResource schema.GroupResource,
 	codec runtime.Codec,
 	rootpath string,
-	isNamespaced bool,
 	newFunc func() runtime.Object,
 	newListFunc func() runtime.Object,
 ) rest.Storage {
@@ -52,25 +53,28 @@ func NewFilepathREST(
 		TableConvertor: rest.NewDefaultTableConvertor(groupResource),
 		codec:          codec,
 		objRootPath:    objRoot,
-		isNamespaced:   isNamespaced,
 		newFunc:        newFunc,
 		newListFunc:    newListFunc,
 		watchers:       make(map[int]*jsonWatch, 10),
+		strategy:       strategy,
+		groupResource:  groupResource,
 	}
 	return rest
 }
 
 type filepathREST struct {
 	rest.TableConvertor
-	codec        runtime.Codec
-	objRootPath  string
-	isNamespaced bool
+	codec       runtime.Codec
+	objRootPath string
 
 	muWatchers sync.RWMutex
 	watchers   map[int]*jsonWatch
 
 	newFunc     func() runtime.Object
 	newListFunc func() runtime.Object
+
+	strategy      rest.RESTCreateStrategy
+	groupResource schema.GroupResource
 }
 
 func (f *filepathREST) notifyWatchers(ev watch.Event) {
@@ -90,7 +94,7 @@ func (f *filepathREST) NewList() runtime.Object {
 }
 
 func (f *filepathREST) NamespaceScoped() bool {
-	return f.isNamespaced
+	return f.strategy.NamespaceScoped()
 }
 
 func (f *filepathREST) Get(
@@ -98,7 +102,11 @@ func (f *filepathREST) Get(
 	name string,
 	options *metav1.GetOptions,
 ) (runtime.Object, error) {
-	return read(f.codec, f.objectFileName(ctx, name), f.newFunc)
+	obj, err := read(f.codec, f.objectFileName(ctx, name), f.newFunc)
+	if err != nil && os.IsNotExist(err) {
+		return nil, apierrors.NewNotFound(f.groupResource, name)
+	}
+	return obj, err
 }
 
 func (f *filepathREST) List(
@@ -126,13 +134,17 @@ func (f *filepathREST) Create(
 	createValidation rest.ValidateObjectFunc,
 	options *metav1.CreateOptions,
 ) (runtime.Object, error) {
+	if err := rest.BeforeCreate(f.strategy, ctx, obj); err != nil {
+		return nil, err
+	}
+
 	if createValidation != nil {
 		if err := createValidation(ctx, obj); err != nil {
 			return nil, err
 		}
 	}
 
-	if f.isNamespaced {
+	if f.NamespaceScoped() {
 		// ensures namespace dir
 		ns, ok := genericapirequest.NamespaceFrom(ctx)
 		if !ok {
@@ -184,7 +196,7 @@ func (f *filepathREST) Update(
 	}
 
 	// TODO: should not be necessary, verify Get works before creating filepath
-	if f.isNamespaced {
+	if f.NamespaceScoped() {
 		// ensures namespace dir
 		ns, ok := genericapirequest.NamespaceFrom(ctx)
 		if !ok {
@@ -284,7 +296,7 @@ func (f *filepathREST) DeleteCollection(
 }
 
 func (f *filepathREST) objectFileName(ctx context.Context, name string) string {
-	if f.isNamespaced {
+	if f.NamespaceScoped() {
 		// FIXME: return error if namespace is not found
 		ns, _ := genericapirequest.NamespaceFrom(ctx)
 		return filepath.Join(f.objRootPath, ns, name+".json")
@@ -293,7 +305,7 @@ func (f *filepathREST) objectFileName(ctx context.Context, name string) string {
 }
 
 func (f *filepathREST) objectDirName(ctx context.Context) string {
-	if f.isNamespaced {
+	if f.NamespaceScoped() {
 		// FIXME: return error if namespace is not found
 		ns, _ := genericapirequest.NamespaceFrom(ctx)
 		return filepath.Join(f.objRootPath, ns)
@@ -414,8 +426,4 @@ func (w *jsonWatch) Stop() {
 
 func (w *jsonWatch) ResultChan() <-chan watch.Event {
 	return w.ch
-}
-
-func (f *filepathREST) ConvertToTable(ctx context.Context, object runtime.Object, tableOptions runtime.Object) (*metav1.Table, error) {
-	return &metav1.Table{}, nil
 }

@@ -7,7 +7,7 @@
 bin
 
 # Test data
-data
+data/
 
 # Test binary, built with `go test -c`
 *.test
