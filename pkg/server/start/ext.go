@@ -29,10 +29,10 @@ var (
 	RecommendedConfigFns  []func(*pkgserver.RecommendedConfig) *pkgserver.RecommendedConfig
 	ServerOptionsFns      []func(server *ServerOptions) *ServerOptions
 	FlagsFns              []func(fs *pflag.FlagSet) *pflag.FlagSet
-	NewCommandStartServer = NewCommandStartWardleServer
+	NewCommandStartServer = NewCommandStartTiltServer
 )
 
-type ServerOptions = WardleServerOptions
+type ServerOptions = TiltServerOptions
 
 func ApplyServerOptionsFns(in *ServerOptions) *ServerOptions {
 	for i := range ServerOptionsFns {
@@ -62,9 +62,4 @@ func SetOpenAPIDefinitions(name, version string, defs openapicommon.GetOpenAPIDe
 		config.OpenAPIConfig.Info.Version = version
 		return config
 	})
-}
-
-func getEctdPath() string {
-	// TODO: make this configurable
-	return "/registry/tilt-apiserver"
 }

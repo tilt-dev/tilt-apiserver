@@ -52,7 +52,7 @@ func init() {
 
 // ExtraConfig holds custom apiserver config
 type ExtraConfig struct {
-	// Place you custom config here.
+	*genericapiserver.DeprecatedInsecureServingInfo
 }
 
 // Config defines the config for the apiserver
@@ -61,8 +61,8 @@ type Config struct {
 	ExtraConfig   ExtraConfig
 }
 
-// WardleServer contains state for a Kubernetes cluster master/api server.
-type WardleServer struct {
+// TiltServer contains state for a Kubernetes cluster master/api server.
+type TiltServer struct {
 	GenericAPIServer *genericapiserver.GenericAPIServer
 }
 
@@ -91,8 +91,8 @@ func (cfg *Config) Complete() CompletedConfig {
 	return CompletedConfig{&c}
 }
 
-// New returns a new instance of WardleServer from the given config.
-func (c completedConfig) New() (*WardleServer, error) {
+// New returns a new instance of TiltServer from the given config.
+func (c completedConfig) New() (*TiltServer, error) {
 	genericServer, err := c.GenericConfig.New("tilt-apiserver", genericapiserver.NewEmptyDelegate())
 	if err != nil {
 		return nil, err
@@ -101,19 +101,9 @@ func (c completedConfig) New() (*WardleServer, error) {
 	// change: apiserver-runtime
 	genericServer = ApplyGenericAPIServerFns(genericServer)
 
-	s := &WardleServer{
+	s := &TiltServer{
 		GenericAPIServer: genericServer,
 	}
-
-	// change: apiserver-runtime
-	// v1alpha1storage := map[string]rest.Storage{}
-	// v1alpha1storage["flunders"] = wardleregistry.RESTInPeace(flunderstorage.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter))
-	// v1alpha1storage["fischers"] = wardleregistry.RESTInPeace(fischerstorage.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter))
-	// apiGroupInfo.VersionedResourcesStorageMap["v1alpha1"] = v1alpha1storage
-
-	// v1beta1storage := map[string]rest.Storage{}
-	// v1beta1storage["flunders"] = wardleregistry.RESTInPeace(flunderstorage.NewREST(Scheme, c.GenericConfig.RESTOptionsGetter))
-	// apiGroupInfo.VersionedResourcesStorageMap["v1beta1"] = v1beta1storage
 
 	// Add new APIs through inserting into APIs
 	apiGroups, err := BuildAPIGroupInfos(Scheme, c.GenericConfig.RESTOptionsGetter)

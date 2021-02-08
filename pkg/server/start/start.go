@@ -17,9 +17,9 @@ limitations under the License.
 package start
 
 import (
-	"fmt"
 	"io"
 	"net"
+	"net/http"
 
 	"github.com/spf13/cobra"
 	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
@@ -32,29 +32,25 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
-	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	"k8s.io/klog"
 )
 
-// change: apiserver-runtime
-//const defaultEtcdPathPrefix = "/registry/wardle.example.com"
-
-// WardleServerOptions contains state for master/api server
-type WardleServerOptions struct {
-	RecommendedOptions *genericoptions.RecommendedOptions
-	Codec              runtime.Codec
+// TiltServerOptions contains state for master/api server
+type TiltServerOptions struct {
+	ServingOptions *genericoptions.DeprecatedInsecureServingOptions
+	Codec          runtime.Codec
 
 	StdOut io.Writer
 	StdErr io.Writer
 }
 
-// NewWardleServerOptions returns a new WardleServerOptions
-func NewWardleServerOptions(out, errOut io.Writer, codec runtime.Codec) *WardleServerOptions {
+// NewTiltServerOptions returns a new TiltServerOptions
+func NewTiltServerOptions(out, errOut io.Writer, codec runtime.Codec) *TiltServerOptions {
 	// change: apiserver-runtime
-	o := &WardleServerOptions{
-		RecommendedOptions: genericoptions.NewRecommendedOptions(
-			getEctdPath(),
-			codec,
-		),
+	o := &TiltServerOptions{
+		ServingOptions: &genericoptions.DeprecatedInsecureServingOptions{
+			BindAddress: net.ParseIP("127.0.0.1"),
+		},
 		Codec: codec,
 
 		StdOut: out,
@@ -63,13 +59,13 @@ func NewWardleServerOptions(out, errOut io.Writer, codec runtime.Codec) *WardleS
 	return o
 }
 
-// NewCommandStartWardleServer provides a CLI handler for 'start master' command
-// with a default WardleServerOptions.
-func NewCommandStartWardleServer(defaults *WardleServerOptions, stopCh <-chan struct{}) *cobra.Command {
+// NewCommandStartTiltServer provides a CLI handler for 'start master' command
+// with a default TiltServerOptions.
+func NewCommandStartTiltServer(defaults *TiltServerOptions, stopCh <-chan struct{}) *cobra.Command {
 	o := *defaults
 	cmd := &cobra.Command{
-		Short: "Launch a wardle API server",
-		Long:  "Launch a wardle API server",
+		Short: "Launch a tilt API server",
+		Long:  "Launch a tilt API server",
 		RunE: func(c *cobra.Command, args []string) error {
 			if err := o.Complete(); err != nil {
 				return err
@@ -77,7 +73,7 @@ func NewCommandStartWardleServer(defaults *WardleServerOptions, stopCh <-chan st
 			if err := o.Validate(args); err != nil {
 				return err
 			}
-			if err := o.RunWardleServer(stopCh); err != nil {
+			if err := o.RunTiltServer(stopCh); err != nil {
 				return err
 			}
 			return nil
@@ -85,58 +81,43 @@ func NewCommandStartWardleServer(defaults *WardleServerOptions, stopCh <-chan st
 	}
 
 	flags := cmd.Flags()
-	o.RecommendedOptions.AddFlags(flags)
-	utilfeature.DefaultMutableFeatureGate.AddFlag(flags)
+	o.ServingOptions.AddFlags(flags)
 
 	return cmd
 }
 
-// Validate validates WardleServerOptions
-func (o WardleServerOptions) Validate(args []string) error {
+// Validate validates TiltServerOptions
+func (o TiltServerOptions) Validate(args []string) error {
 	errors := []error{}
-	errors = append(errors, o.RecommendedOptions.Validate()...)
+	errors = append(errors, o.ServingOptions.Validate()...)
 	return utilerrors.NewAggregate(errors)
 }
 
 // Complete fills in fields required to have valid data
-func (o *WardleServerOptions) Complete() error {
-	// change: apiserver-runtime
-	//// register admission plugins
-	//banflunder.Register(o.RecommendedOptions.Admission.Plugins)
-	//
-	//// add admisison plugins to the RecommendedPluginOrder
-	//o.RecommendedOptions.Admission.RecommendedPluginOrder = append(o.RecommendedOptions.Admission.RecommendedPluginOrder, "BanFlunder")
-
+func (o *TiltServerOptions) Complete() error {
 	ApplyServerOptionsFns(o)
-
 	return nil
 }
 
-// Config returns config for the api server given WardleServerOptions
-func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
-	// TODO have a "real" external address
-	if err := o.RecommendedOptions.SecureServing.MaybeDefaultWithSelfSignedCerts("localhost", nil, []net.IP{net.ParseIP("127.0.0.1")}); err != nil {
-		return nil, fmt.Errorf("error creating self-signed certificates: %v", err)
+// Config returns config for the api server given TiltServerOptions
+func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
+	serverConfig := genericapiserver.NewRecommendedConfig(apiserver.Codecs)
+	serverConfig = ApplyRecommendedConfigFns(serverConfig)
+
+	extraConfig := apiserver.ExtraConfig{}
+	err := o.ServingOptions.ApplyTo(&extraConfig.DeprecatedInsecureServingInfo)
+	if err != nil {
+		return nil, err
 	}
 
-	//	o.RecommendedOptions.Etcd.StorageConfig.Paging = utilfeature.DefaultFeatureGate.Enabled(features.APIListChunking)
+	serving := extraConfig.DeprecatedInsecureServingInfo
+	serverConfig.ExternalAddress = serving.Listener.Addr().String()
 
-	// change: apiserver-runtime
-	// ExtraAdmissionInitializers set through ApplyServerOptionsFns by appending to ServerOptionsFns
-	//
-	// o.RecommendedOptions.ExtraAdmissionInitializers = func(c *genericapiserver.RecommendedConfig) ([]admission.PluginInitializer, error) {
-	//	 client, err := clientset.NewForConfig(c.LoopbackClientConfig)
-	//	 if err != nil {
-	//		 return nil, err
-	//	 }
-	//	 informerFactory := informers.NewSharedInformerFactory(client, c.LoopbackClientConfig.Timeout)
-	//	 o.SharedInformerFactory = informerFactory
-	//	 return []admission.PluginInitializer{wardleinitializer.New(informerFactory)}, nil
-	// }
-
-	serverConfig := genericapiserver.NewRecommendedConfig(apiserver.Codecs)
-
-	serverConfig = ApplyRecommendedConfigFns(serverConfig)
+	loopbackConfig, err := serving.NewLoopbackClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	serverConfig.LoopbackClientConfig = loopbackConfig
 
 	// change: apiserver-runtime
 	// OpenAPIConfig set through ApplyRecommendedConfigFns by calling SetOpenAPIDefinitions
@@ -145,21 +126,17 @@ func (o *WardleServerOptions) Config() (*apiserver.Config, error) {
 	serverConfig.OpenAPIConfig.Info.Title = "Tilt"
 	serverConfig.OpenAPIConfig.Info.Version = "0.1"
 
-	if err := o.RecommendedOptions.ApplyTo(serverConfig); err != nil {
-		return nil, err
-	}
-
 	serverConfig.RESTOptionsGetter = o
 
 	config := &apiserver.Config{
 		GenericConfig: serverConfig,
-		ExtraConfig:   apiserver.ExtraConfig{},
+		ExtraConfig:   extraConfig,
 	}
 
 	return config, nil
 }
 
-func (o WardleServerOptions) GetRESTOptions(resource schema.GroupResource) (generic.RESTOptions, error) {
+func (o TiltServerOptions) GetRESTOptions(resource schema.GroupResource) (generic.RESTOptions, error) {
 	return generic.RESTOptions{
 		StorageConfig: &storagebackend.Config{
 			Codec: o.Codec,
@@ -167,8 +144,8 @@ func (o WardleServerOptions) GetRESTOptions(resource schema.GroupResource) (gene
 	}, nil
 }
 
-// RunWardleServer starts a new WardleServer given WardleServerOptions
-func (o WardleServerOptions) RunWardleServer(stopCh <-chan struct{}) error {
+// RunTiltServer starts a new TiltServer given TiltServerOptions
+func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
 	config, err := o.Config()
 	if err != nil {
 		return err
@@ -186,5 +163,19 @@ func (o WardleServerOptions) RunWardleServer(stopCh <-chan struct{}) error {
 		return nil
 	})
 
-	return server.GenericAPIServer.PrepareRun().Run(stopCh)
+	prepared := server.GenericAPIServer.PrepareRun()
+	serving := config.ExtraConfig.DeprecatedInsecureServingInfo
+	klog.Infof("Serving tilt-apiserver insecurely on %s", serving.Listener.Addr())
+
+	stoppedCh, err := genericapiserver.RunServer(&http.Server{
+		Addr:           serving.Listener.Addr().String(),
+		Handler:        prepared.Handler,
+		MaxHeaderBytes: 1 << 20,
+	}, serving.Listener, prepared.ShutdownTimeout, stopCh)
+	if err != nil {
+		return err
+	}
+
+	<-stoppedCh
+	return err
 }

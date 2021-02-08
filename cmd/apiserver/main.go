@@ -28,9 +28,7 @@ import (
 func main() {
 	builder := builder.APIServer.
 		// +kubebuilder:scaffold:resource-register
-		WithResourceAndHandler(&corev1alpha1.Manifest{}, filepath.NewJSONFilepathStorageProvider(&corev1alpha1.Manifest{}, "data")).
-		SetDelegateAuthOptional().
-		WithLocalDebugExtension()
+		WithResourceAndHandler(&corev1alpha1.Manifest{}, filepath.NewJSONFilepathStorageProvider(&corev1alpha1.Manifest{}, "data"))
 
 	err := builder.Execute()
 	if err != nil {

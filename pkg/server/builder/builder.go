@@ -86,7 +86,7 @@ func (a *Server) Build() (*Command, error) {
 	}
 
 	codec := apiserver.Codecs.LegacyCodec(a.orderedGroupVersions...)
-	o := start.NewWardleServerOptions(os.Stdout, os.Stderr, codec)
+	o := start.NewTiltServerOptions(os.Stdout, os.Stderr, codec)
 	cmd := start.NewCommandStartServer(o, genericapiserver.SetupSignalHandler())
 	start.ApplyFlagsFns(cmd.Flags())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
