@@ -1,12 +1,14 @@
 local_resource(
   'generate',
   cmd='make generate',
-  deps=['./pkg/apis/core/v1alpha1/manifest_types.go'])
+  deps=['./pkg/apis/core/v1alpha1/manifest_types.go'],
+  trigger_mode=TRIGGER_MODE_MANUAL,
+  auto_init=False)
 
 local_resource(
   'apiserver',
   serve_cmd='make run-apiserver',
-  resource_deps=['generate'])
+  links=['localhost:9443'])
 
 local_resource(
   'kubectl-get',

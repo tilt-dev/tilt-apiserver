@@ -156,7 +156,7 @@ func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
 		return err
 	}
 
-	server.GenericAPIServer.AddPostStartHookOrDie("start-sample-server-informers", func(context genericapiserver.PostStartHookContext) error {
+	server.GenericAPIServer.AddPostStartHookOrDie("start-tilt-server-informers", func(context genericapiserver.PostStartHookContext) error {
 		if config.GenericConfig.SharedInformerFactory != nil {
 			config.GenericConfig.SharedInformerFactory.Start(context.StopCh)
 		}
@@ -175,6 +175,8 @@ func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
 	if err != nil {
 		return err
 	}
+
+	server.GenericAPIServer.RunPostStartHooks(stopCh)
 
 	<-stoppedCh
 	return err
