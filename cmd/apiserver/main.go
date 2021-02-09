@@ -22,13 +22,15 @@ import (
 
 	// +kubebuilder:scaffold:resource-imports
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
 )
 
 func main() {
 	builder := builder.APIServer.
 		// +kubebuilder:scaffold:resource-register
-		WithResourceAndHandler(&corev1alpha1.Manifest{}, filepath.NewJSONFilepathStorageProvider(&corev1alpha1.Manifest{}, "data"))
+		WithResourceAndHandler(&corev1alpha1.Manifest{}, filepath.NewJSONFilepathStorageProvider(&corev1alpha1.Manifest{}, "data")).
+		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions)
 
 	err := builder.Execute()
 	if err != nil {

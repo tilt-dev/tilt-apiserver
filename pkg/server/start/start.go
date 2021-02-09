@@ -22,12 +22,10 @@ import (
 	"net/http"
 
 	"github.com/spf13/cobra"
-	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/apiserver/pkg/endpoints/openapi"
 	"k8s.io/apiserver/pkg/registry/generic"
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
@@ -118,14 +116,6 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 		return nil, err
 	}
 	serverConfig.LoopbackClientConfig = loopbackConfig
-
-	// change: apiserver-runtime
-	// OpenAPIConfig set through ApplyRecommendedConfigFns by calling SetOpenAPIDefinitions
-	//
-	serverConfig.OpenAPIConfig = genericapiserver.DefaultOpenAPIConfig(tiltopenapi.GetOpenAPIDefinitions, openapi.NewDefinitionNamer(apiserver.Scheme))
-	serverConfig.OpenAPIConfig.Info.Title = "Tilt"
-	serverConfig.OpenAPIConfig.Info.Version = "0.1"
-
 	serverConfig.RESTOptionsGetter = o
 
 	config := &apiserver.Config{
