@@ -1,0 +1,19 @@
+version: 2.1
+orbs:
+  slack: circleci/slack@3.3.0
+jobs:
+  build:
+    docker:
+      - image: circleci/golang:1.14
+    working_directory: /go/src/github.com/tilt-dev/tilt-apiserver
+    steps:
+      - checkout
+      - run: make test verify-generate
+      - slack/notify-on-failure:
+          only_for_branches: master
+        
+workflows:
+  version: 2
+  build:
+    jobs:
+      - build
