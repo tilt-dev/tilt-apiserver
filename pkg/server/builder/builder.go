@@ -44,8 +44,7 @@ type Server struct {
 	schemeBuilder        runtime.SchemeBuilder
 }
 
-// Build returns a Command used to run the apiserver
-func (a *Server) Build() (*Command, error) {
+func (a *Server) BuildCodec() (runtime.Codec, error) {
 	a.schemes = append(a.schemes, apiserver.Scheme)
 	a.schemeBuilder.Register(
 		func(scheme *runtime.Scheme) error {
@@ -85,19 +84,24 @@ func (a *Server) Build() (*Command, error) {
 		return nil, errs{list: a.errs}
 	}
 
-	codec := apiserver.Codecs.LegacyCodec(a.orderedGroupVersions...)
+	return apiserver.Codecs.LegacyCodec(a.orderedGroupVersions...), nil
+}
+
+// Build returns a Command used to run the apiserver
+func (a *Server) ToServerOptions(codec runtime.Codec) *Command {
 	o := start.NewTiltServerOptions(os.Stdout, os.Stderr, codec)
 	cmd := start.NewCommandStartServer(o, genericapiserver.SetupSignalHandler())
 	start.ApplyFlagsFns(cmd.Flags())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
-	return cmd, nil
+	return cmd
 }
 
 // Execute builds and executes the apiserver Command.
 func (a *Server) Execute() error {
-	cmd, err := a.Build()
+	codec, err := a.BuildCodec()
 	if err != nil {
 		return err
 	}
-	return cmd.Execute()
+
+	return a.ToServerOptions(codec).Execute()
 }
