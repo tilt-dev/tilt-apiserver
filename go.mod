@@ -21,4 +21,3 @@ require (
 	sigs.k8s.io/apiserver-runtime v0.0.0-20201103144618-b52895ea8337
 	sigs.k8s.io/controller-runtime v0.6.0
 )
-
