@@ -5,9 +5,15 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
+
+// Registers a request handler for the resource that stores it on the file system.
+func (a *Server) WithResourceFileStorage(obj resource.Object, path string) *Server {
+	return a.WithResourceAndHandler(obj, filepath.NewJSONFilepathStorageProvider(obj, path))
+}
 
 // WithResourceAndHandler registers a request handler for the resource rather than the default
 // etcd backed storage.

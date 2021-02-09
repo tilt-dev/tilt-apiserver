@@ -2,7 +2,6 @@ package builder
 
 import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
-	"k8s.io/apimachinery/pkg/runtime"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 )
 
@@ -19,22 +18,5 @@ import (
 func (a *Server) WithOpenAPIDefinitions(
 	name, version string, openAPI openapicommon.GetOpenAPIDefinitions) *Server {
 	start.SetOpenAPIDefinitions(name, version, openAPI)
-	return a
-}
-
-// WithAdditionalSchemeInstallers registers functions to install additional functions or resources into the Scheme.
-// This can be used to manually registering defaulting functions, conversion functions, or resource types, rather
-// than registering them automatically by implementing the corresponding interfaces on the resources.
-func (a *Server) WithAdditionalSchemeInstallers(fns ...func(*runtime.Scheme) error) *Server {
-	a.schemeBuilder.Register(fns...)
-	return a
-}
-
-// WithAdditionalSchemesToBuild will add types and functions to these Schemes in addition to the
-// apiserver.Scheme.
-// This can be used to register the resource types, defaulting functions, and conversion functions
-// with additional Scheme's.
-func (a *Server) WithAdditionalSchemesToBuild(s ...*runtime.Scheme) *Server {
-	a.schemes = append(a.schemes, s...)
 	return a
 }
