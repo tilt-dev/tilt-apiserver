@@ -71,9 +71,13 @@ func NewCommandStartTiltServer(defaults *TiltServerOptions, stopCh <-chan struct
 			if err := o.Validate(args); err != nil {
 				return err
 			}
-			if err := o.RunTiltServer(stopCh); err != nil {
+			stoppedCh, err := o.RunTiltServer(stopCh)
+			if err != nil {
 				return err
 			}
+			klog.Infof("Serving tilt-apiserver insecurely on %s", o.ServingOptions.Listener.Addr())
+
+			<-stoppedCh
 			return nil
 		},
 	}
@@ -135,15 +139,15 @@ func (o TiltServerOptions) GetRESTOptions(resource schema.GroupResource) (generi
 }
 
 // RunTiltServer starts a new TiltServer given TiltServerOptions
-func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
+func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) (<-chan struct{}, error) {
 	config, err := o.Config()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	server, err := config.Complete().New()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	server.GenericAPIServer.AddPostStartHookOrDie("start-tilt-server-informers", func(context genericapiserver.PostStartHookContext) error {
@@ -155,7 +159,6 @@ func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
 
 	prepared := server.GenericAPIServer.PrepareRun()
 	serving := config.ExtraConfig.DeprecatedInsecureServingInfo
-	klog.Infof("Serving tilt-apiserver insecurely on %s", serving.Listener.Addr())
 
 	stoppedCh, err := genericapiserver.RunServer(&http.Server{
 		Addr:           serving.Listener.Addr().String(),
@@ -163,11 +166,10 @@ func (o TiltServerOptions) RunTiltServer(stopCh <-chan struct{}) error {
 		MaxHeaderBytes: 1 << 20,
 	}, serving.Listener, prepared.ShutdownTimeout, stopCh)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	server.GenericAPIServer.RunPostStartHooks(stopCh)
 
-	<-stoppedCh
-	return err
+	return stoppedCh, nil
 }
