@@ -1,15 +1,12 @@
 package filepath
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +33,7 @@ var _ rest.Storage = &filepathREST{}
 
 // NewFilepathREST instantiates a new REST storage.
 func NewFilepathREST(
+	fs FS,
 	strategy rest.RESTCreateStrategy,
 	groupResource schema.GroupResource,
 	codec runtime.Codec,
@@ -44,7 +42,7 @@ func NewFilepathREST(
 	newListFunc func() runtime.Object,
 ) rest.Storage {
 	objRoot := filepath.Join(rootpath, groupResource.Group, groupResource.Resource)
-	if err := ensureDir(objRoot); err != nil {
+	if err := fs.EnsureDir(objRoot); err != nil {
 		panic(fmt.Sprintf("unable to write data dir: %s", err))
 	}
 
@@ -58,6 +56,7 @@ func NewFilepathREST(
 		watchers:       make(map[int]*jsonWatch, 10),
 		strategy:       strategy,
 		groupResource:  groupResource,
+		fs:             fs,
 	}
 	return rest
 }
@@ -75,6 +74,7 @@ type filepathREST struct {
 
 	strategy      rest.RESTCreateStrategy
 	groupResource schema.GroupResource
+	fs            FS
 }
 
 func (f *filepathREST) notifyWatchers(ev watch.Event) {
@@ -102,7 +102,7 @@ func (f *filepathREST) Get(
 	name string,
 	options *metav1.GetOptions,
 ) (runtime.Object, error) {
-	obj, err := read(f.codec, f.objectFileName(ctx, name), f.newFunc)
+	obj, err := f.fs.Read(f.codec, f.objectFileName(ctx, name), f.newFunc)
 	if err != nil && os.IsNotExist(err) {
 		return nil, apierrors.NewNotFound(f.groupResource, name)
 	}
@@ -120,7 +120,7 @@ func (f *filepathREST) List(
 	}
 
 	dirname := f.objectDirName(ctx)
-	if err := visitDir(dirname, f.newFunc, f.codec, func(path string, obj runtime.Object) {
+	if err := f.fs.VisitDir(dirname, f.newFunc, f.codec, func(path string, obj runtime.Object) {
 		appendItem(v, obj)
 	}); err != nil {
 		return nil, fmt.Errorf("failed walking filepath %v", dirname)
@@ -150,7 +150,7 @@ func (f *filepathREST) Create(
 		if !ok {
 			return nil, ErrNamespaceNotExists
 		}
-		if err := ensureDir(filepath.Join(f.objRootPath, ns)); err != nil {
+		if err := f.fs.EnsureDir(filepath.Join(f.objRootPath, ns)); err != nil {
 			return nil, err
 		}
 	}
@@ -161,11 +161,11 @@ func (f *filepathREST) Create(
 	}
 	filename := f.objectFileName(ctx, accessor.GetName())
 
-	if exists(filename) {
+	if f.fs.Exists(filename) {
 		return nil, ErrFileNotExists
 	}
 
-	if err := write(f.codec, filename, obj); err != nil {
+	if err := f.fs.Write(f.codec, filename, obj); err != nil {
 		return nil, err
 	}
 
@@ -202,7 +202,7 @@ func (f *filepathREST) Update(
 		if !ok {
 			return nil, false, ErrNamespaceNotExists
 		}
-		if err := ensureDir(filepath.Join(f.objRootPath, ns)); err != nil {
+		if err := f.fs.EnsureDir(filepath.Join(f.objRootPath, ns)); err != nil {
 			return nil, false, err
 		}
 	}
@@ -219,7 +219,7 @@ func (f *filepathREST) Update(
 				return nil, false, err
 			}
 		}
-		if err := write(f.codec, filename, updatedObj); err != nil {
+		if err := f.fs.Write(f.codec, filename, updatedObj); err != nil {
 			return nil, false, err
 		}
 		f.notifyWatchers(watch.Event{
@@ -234,7 +234,7 @@ func (f *filepathREST) Update(
 			return nil, false, err
 		}
 	}
-	if err := write(f.codec, filename, updatedObj); err != nil {
+	if err := f.fs.Write(f.codec, filename, updatedObj); err != nil {
 		return nil, false, err
 	}
 	f.notifyWatchers(watch.Event{
@@ -250,7 +250,7 @@ func (f *filepathREST) Delete(
 	deleteValidation rest.ValidateObjectFunc,
 	options *metav1.DeleteOptions) (runtime.Object, bool, error) {
 	filename := f.objectFileName(ctx, name)
-	if !exists(filename) {
+	if !f.fs.Exists(filename) {
 		return nil, false, ErrFileNotExists
 	}
 
@@ -264,7 +264,7 @@ func (f *filepathREST) Delete(
 		}
 	}
 
-	if err := os.Remove(filename); err != nil {
+	if err := f.fs.Remove(filename); err != nil {
 		return nil, false, err
 	}
 	f.notifyWatchers(watch.Event{
@@ -286,8 +286,8 @@ func (f *filepathREST) DeleteCollection(
 		return nil, err
 	}
 	dirname := f.objectDirName(ctx)
-	if err := visitDir(dirname, f.newFunc, f.codec, func(path string, obj runtime.Object) {
-		_ = os.Remove(path)
+	if err := f.fs.VisitDir(dirname, f.newFunc, f.codec, func(path string, obj runtime.Object) {
+		_ = f.fs.Remove(path)
 		appendItem(v, obj)
 	}); err != nil {
 		return nil, fmt.Errorf("failed walking filepath %v", dirname)
@@ -311,59 +311,6 @@ func (f *filepathREST) objectDirName(ctx context.Context) string {
 		return filepath.Join(f.objRootPath, ns)
 	}
 	return filepath.Join(f.objRootPath)
-}
-
-func write(encoder runtime.Encoder, filepath string, obj runtime.Object) error {
-	buf := new(bytes.Buffer)
-	if err := encoder.Encode(obj, buf); err != nil {
-		return err
-	}
-	return ioutil.WriteFile(filepath, buf.Bytes(), 0600)
-}
-
-func read(decoder runtime.Decoder, path string, newFunc func() runtime.Object) (runtime.Object, error) {
-	content, err := ioutil.ReadFile(filepath.Clean(path))
-	if err != nil {
-		return nil, err
-	}
-	newObj := newFunc()
-	decodedObj, _, err := decoder.Decode(content, nil, newObj)
-	if err != nil {
-		return nil, err
-	}
-	return decodedObj, nil
-}
-
-func exists(filepath string) bool {
-	_, err := os.Stat(filepath)
-	return err == nil
-}
-
-func ensureDir(dirname string) error {
-	if !exists(dirname) {
-		return os.MkdirAll(dirname, 0700)
-	}
-	return nil
-}
-
-func visitDir(dirname string, newFunc func() runtime.Object, codec runtime.Decoder, visitFunc func(string, runtime.Object)) error {
-	return filepath.Walk(dirname, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if !strings.HasSuffix(info.Name(), ".json") {
-			return nil
-		}
-		newObj, err := read(codec, path, newFunc)
-		if err != nil {
-			return err
-		}
-		visitFunc(path, newObj)
-		return nil
-	})
 }
 
 func appendItem(v reflect.Value, obj runtime.Object) {
