@@ -12,7 +12,8 @@ import (
 
 // Registers a request handler for the resource that stores it on the file system.
 func (a *Server) WithResourceFileStorage(obj resource.Object, path string) *Server {
-	return a.WithResourceAndHandler(obj, filepath.NewJSONFilepathStorageProvider(obj, path))
+	fs := filepath.RealFS{}
+	return a.WithResourceAndHandler(obj, filepath.NewJSONFilepathStorageProvider(obj, path, fs))
 }
 
 // WithResourceAndHandler registers a request handler for the resource rather than the default
