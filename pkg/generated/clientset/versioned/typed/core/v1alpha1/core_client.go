@@ -33,8 +33,8 @@ type CoreV1alpha1Client struct {
 	restClient rest.Interface
 }
 
-func (c *CoreV1alpha1Client) Manifests(namespace string) ManifestInterface {
-	return newManifests(c, namespace)
+func (c *CoreV1alpha1Client) Manifests() ManifestInterface {
+	return newManifests(c)
 }
 
 // NewForConfig creates a new CoreV1alpha1Client for the given config.
