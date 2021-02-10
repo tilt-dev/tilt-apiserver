@@ -20,7 +20,3 @@ package v1alpha1
 // ManifestListerExpansion allows custom methods to be added to
 // ManifestLister.
 type ManifestListerExpansion interface{}
-
-// ManifestNamespaceListerExpansion allows custom methods to be added to
-// ManifestNamespaceLister.
-type ManifestNamespaceListerExpansion interface{}

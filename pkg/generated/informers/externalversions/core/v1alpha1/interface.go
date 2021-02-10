@@ -40,5 +40,5 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 
 // Manifests returns a ManifestInformer.
 func (v *version) Manifests() ManifestInformer {
-	return &manifestInformer{factory: v.factory, namespace: v.namespace, tweakListOptions: v.tweakListOptions}
+	return &manifestInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
