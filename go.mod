@@ -8,6 +8,7 @@ require (
 	github.com/go-openapi/spec v0.19.3
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.6.1
 	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b // indirect
 	golang.org/x/text v0.3.4 // indirect
 	k8s.io/api v0.20.2
