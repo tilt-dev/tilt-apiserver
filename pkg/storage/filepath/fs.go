@@ -24,6 +24,8 @@ type FS interface {
 type RealFS struct {
 }
 
+var _ FS = RealFS{}
+
 func (fs RealFS) Remove(filepath string) error {
 	return os.Remove(filepath)
 }
