@@ -27,7 +27,7 @@ import (
 
 func main() {
 	builder := builder.APIServer.
-		WithResourceFileStorage(&corev1alpha1.Manifest{}, "data").
+		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions)
 
 	err := builder.Execute()
