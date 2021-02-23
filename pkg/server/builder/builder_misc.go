@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"io"
+
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 )
@@ -17,6 +19,13 @@ import (
 //      -O zz_generated.openapi --output-base ../../.. --go-header-file ./hack/boilerplate.go.txt
 func (a *Server) WithOpenAPIDefinitions(
 	name, version string, openAPI openapicommon.GetOpenAPIDefinitions) *Server {
-	start.SetOpenAPIDefinitions(name, version, openAPI)
+	a.recommendedConfigFns = append(a.recommendedConfigFns, start.SetOpenAPIDefinitionFn(a.scheme, name, version, openAPI))
+	return a
+}
+
+// WithOutputWriter redirects output from both stdout and stderr to a custom writer.
+func (a *Server) WithOutputWriter(out io.Writer) *Server {
+	a.stdout = out
+	a.stderr = out
 	return a
 }
