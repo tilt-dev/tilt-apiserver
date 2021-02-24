@@ -20,8 +20,6 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
-
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 )
 
 // ErrFileNotExists means the file doesn't actually exist.
@@ -238,11 +236,14 @@ func (f *filepathREST) Update(
 		}
 	}
 
+	objMeta, err := meta.Accessor(oldObj)
+	if err != nil {
+		return nil, false, err
+	}
 	// handle 2-phase deletes -> for entities with finalizers, DeletionTimestamp is set and reconcilers execute +
 	// remove them (triggering more updates); once drained, it can be deleted from the final update operation
 	// loosely based off https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L624
-	objMeta := updatedObj.(resource.Object).GetObjectMeta()
-	if len(objMeta.Finalizers) == 0 && !objMeta.DeletionTimestamp.IsZero() {
+	if len(objMeta.GetFinalizers()) == 0 && !objMeta.GetDeletionTimestamp().IsZero() {
 		if err := f.fs.Remove(filename); err != nil {
 			return nil, false, err
 		}
@@ -283,8 +284,11 @@ func (f *filepathREST) Delete(
 		}
 	}
 
+	objMeta, err := meta.Accessor(oldObj)
+	if err != nil {
+		return nil, false, err
+	}
 	// loosely adapted from https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L854-L877
-	objMeta := oldObj.(resource.Object).GetObjectMeta()
 	if len(objMeta.GetFinalizers()) != 0 {
 		now := metav1.NewTime(time.Now())
 		// per-contract, deletion timestamps can not be unset and can only be moved _earlier_
