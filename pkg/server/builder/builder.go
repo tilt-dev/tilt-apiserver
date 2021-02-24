@@ -19,6 +19,7 @@ package builder
 import (
 	"flag"
 	"io"
+	"net"
 	"os"
 
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
@@ -30,6 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/sets"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	genericoptions "k8s.io/apiserver/pkg/server/options"
 )
 
 // NewServerBuilder builds an apiserver to server Kubernetes resources and sub resources.
@@ -41,6 +43,9 @@ func NewServerBuilder() *Server {
 		scheme:  scheme,
 		codecs:  serializer.NewCodecFactory(scheme),
 		storage: map[schema.GroupResource]*singletonProvider{},
+		serving: &genericoptions.DeprecatedInsecureServingOptions{
+			BindAddress: net.ParseIP("127.0.0.1"),
+		},
 	}
 }
 
@@ -57,6 +62,8 @@ type Server struct {
 	groupVersions        map[schema.GroupVersion]bool
 	orderedGroupVersions []schema.GroupVersion
 	schemeBuilder        runtime.SchemeBuilder
+	serving              *genericoptions.DeprecatedInsecureServingOptions
+	connProvider         apiserver.ConnProvider
 }
 
 func (a *Server) buildCodec() (runtime.Codec, error) {
@@ -106,7 +113,7 @@ func (a *Server) ToServerOptions() (*start.TiltServerOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	return start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns), nil
+	return start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns, a.serving, a.connProvider), nil
 }
 
 // Builds a cobra command that runs the server.
@@ -117,7 +124,7 @@ func (a *Server) ToServerCommand() (*Command, error) {
 		return nil, err
 	}
 
-	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns)
+	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns, a.serving, a.connProvider)
 	cmd := start.NewCommandStartTiltServer(o, genericapiserver.SetupSignalHandler())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
 	return cmd, nil

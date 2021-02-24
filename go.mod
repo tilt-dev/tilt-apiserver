@@ -3,11 +3,12 @@ module github.com/tilt-dev/tilt-apiserver
 go 1.15
 
 require (
+	github.com/akutz/memconn v0.1.0
 	github.com/go-logr/logr v0.2.1
 	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/go-openapi/spec v0.19.3
 	github.com/spf13/cobra v1.0.0
-	github.com/spf13/pflag v1.0.5
+	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/stretchr/testify v1.6.1
 	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b // indirect
 	golang.org/x/text v0.3.4 // indirect
