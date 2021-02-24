@@ -52,7 +52,7 @@ func (a *Server) forGroupVersionResource(
 
 	// add the defaulting function for this version to the scheme
 	if _, ok := obj.(resourcestrategy.Defaulter); ok {
-		apiserver.Scheme.AddTypeDefaultingFunc(obj, func(obj interface{}) {
+		a.scheme.AddTypeDefaultingFunc(obj, func(obj interface{}) {
 			obj.(resourcestrategy.Defaulter).Default()
 		})
 	}

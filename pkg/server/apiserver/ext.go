@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/util/sets"
 	genericregistry "k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -33,7 +34,7 @@ var (
 	GenericAPIServerFns []func(*pkgserver.GenericAPIServer) *pkgserver.GenericAPIServer
 )
 
-func BuildAPIGroupInfos(s *runtime.Scheme, g genericregistry.RESTOptionsGetter) ([]*pkgserver.APIGroupInfo, error) {
+func BuildAPIGroupInfos(scheme *runtime.Scheme, codecs serializer.CodecFactory, g genericregistry.RESTOptionsGetter) ([]*pkgserver.APIGroupInfo, error) {
 	resourcesByGroupVersion := make(map[schema.GroupVersion]sets.String)
 	groups := sets.NewString()
 	for gvr := range APIs {
@@ -52,13 +53,13 @@ func BuildAPIGroupInfos(s *runtime.Scheme, g genericregistry.RESTOptionsGetter) 
 				if _, found := apis[gvr.Version]; !found {
 					apis[gvr.Version] = map[string]rest.Storage{}
 				}
-				apis[gvr.Version][gvr.Resource], err = storageProviderFunc(s, g)
+				apis[gvr.Version][gvr.Resource], err = storageProviderFunc(scheme, g)
 				if err != nil {
 					return nil, err
 				}
 			}
 		}
-		apiGroupInfo := pkgserver.NewDefaultAPIGroupInfo(group, Scheme, metav1.ParameterCodec, Codecs)
+		apiGroupInfo := pkgserver.NewDefaultAPIGroupInfo(group, scheme, metav1.ParameterCodec, codecs)
 		apiGroupInfo.VersionedResourcesStorageMap = apis
 		apiGroups = append(apiGroups, &apiGroupInfo)
 	}

@@ -26,11 +26,11 @@ import (
 )
 
 func main() {
-	builder := builder.APIServer.
+	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions)
 
-	err := builder.Execute()
+	err := builder.ExecuteCommand()
 	if err != nil {
 		klog.Fatal(err)
 	}

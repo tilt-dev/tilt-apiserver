@@ -26,35 +26,31 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 )
 
-var (
-	// Scheme defines methods for serializing and deserializing API objects.
-	Scheme = runtime.NewScheme()
-	// Codecs provides methods for retrieving codecs and serializers for specific
-	// versions and content types.
-	Codecs = serializer.NewCodecFactory(Scheme)
-)
-
-func init() {
+func NewScheme() *runtime.Scheme {
+	scheme := runtime.NewScheme()
 
 	// we need to add the options to empty v1
 	// TODO fix the server code to avoid this
-	metav1.AddToGroupVersion(Scheme, schema.GroupVersion{Version: "v1"})
+	metav1.AddToGroupVersion(scheme, schema.GroupVersion{Version: "v1"})
 
 	// TODO: keep the generic API server from wanting this
 	unversioned := schema.GroupVersion{Group: "", Version: "v1"}
-	Scheme.AddUnversionedTypes(unversioned,
+	scheme.AddUnversionedTypes(unversioned,
 		&metav1.Status{},
 		&metav1.APIVersions{},
 		&metav1.APIGroupList{},
 		&metav1.APIGroup{},
 		&metav1.APIResourceList{},
 	)
+	return scheme
 }
 
 // ExtraConfig holds custom apiserver config
 type ExtraConfig struct {
-	*genericapiserver.DeprecatedInsecureServingInfo
-	Version *version.Info
+	Scheme      *runtime.Scheme
+	Codecs      serializer.CodecFactory
+	ServingInfo *genericapiserver.DeprecatedInsecureServingInfo
+	Version     *version.Info
 }
 
 // Config defines the config for the apiserver
@@ -113,7 +109,7 @@ func (c completedConfig) New() (*TiltServer, error) {
 	}
 
 	// Add new APIs through inserting into APIs
-	apiGroups, err := BuildAPIGroupInfos(Scheme, c.GenericConfig.RESTOptionsGetter)
+	apiGroups, err := BuildAPIGroupInfos(c.ExtraConfig.Scheme, c.ExtraConfig.Codecs, c.GenericConfig.RESTOptionsGetter)
 	if err != nil {
 		return nil, err
 	}
