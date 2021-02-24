@@ -236,7 +236,7 @@ func (f *filepathREST) Update(
 		}
 	}
 
-	objMeta, err := meta.Accessor(oldObj)
+	objMeta, err := meta.Accessor(updatedObj)
 	if err != nil {
 		return nil, false, err
 	}
@@ -290,6 +290,7 @@ func (f *filepathREST) Delete(
 	}
 	// loosely adapted from https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L854-L877
 	if len(objMeta.GetFinalizers()) != 0 {
+
 		now := metav1.NewTime(time.Now())
 		// per-contract, deletion timestamps can not be unset and can only be moved _earlier_
 		if objMeta.GetDeletionTimestamp() == nil || now.Before(objMeta.GetDeletionTimestamp()) {
