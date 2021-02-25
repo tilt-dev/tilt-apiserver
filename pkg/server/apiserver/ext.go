@@ -30,8 +30,7 @@ import (
 type StorageProvider func(s *runtime.Scheme, g genericregistry.RESTOptionsGetter) (rest.Storage, error)
 
 var (
-	APIs                = map[schema.GroupVersionResource]StorageProvider{}
-	GenericAPIServerFns []func(*pkgserver.GenericAPIServer) *pkgserver.GenericAPIServer
+	APIs = map[schema.GroupVersionResource]StorageProvider{}
 )
 
 func BuildAPIGroupInfos(scheme *runtime.Scheme, codecs serializer.CodecFactory, g genericregistry.RESTOptionsGetter) ([]*pkgserver.APIGroupInfo, error) {
@@ -64,11 +63,4 @@ func BuildAPIGroupInfos(scheme *runtime.Scheme, codecs serializer.CodecFactory, 
 		apiGroups = append(apiGroups, &apiGroupInfo)
 	}
 	return apiGroups, nil
-}
-
-func ApplyGenericAPIServerFns(in *pkgserver.GenericAPIServer) *pkgserver.GenericAPIServer {
-	for i := range GenericAPIServerFns {
-		in = GenericAPIServerFns[i](in)
-	}
-	return in
 }
