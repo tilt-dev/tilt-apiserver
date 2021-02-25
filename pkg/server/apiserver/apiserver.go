@@ -111,8 +111,6 @@ func (c completedConfig) New() (*TiltServer, error) {
 		return nil, err
 	}
 
-	genericServer = ApplyGenericAPIServerFns(genericServer)
-
 	s := &TiltServer{
 		GenericAPIServer: genericServer,
 	}
