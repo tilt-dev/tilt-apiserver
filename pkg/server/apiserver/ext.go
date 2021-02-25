@@ -29,14 +29,13 @@ import (
 
 type StorageProvider func(s *runtime.Scheme, g genericregistry.RESTOptionsGetter) (rest.Storage, error)
 
-var (
-	APIs = map[schema.GroupVersionResource]StorageProvider{}
-)
-
-func BuildAPIGroupInfos(scheme *runtime.Scheme, codecs serializer.CodecFactory, g genericregistry.RESTOptionsGetter) ([]*pkgserver.APIGroupInfo, error) {
+func buildAPIGroupInfos(scheme *runtime.Scheme,
+	codecs serializer.CodecFactory,
+	apiMap map[schema.GroupVersionResource]StorageProvider,
+	g genericregistry.RESTOptionsGetter) ([]*pkgserver.APIGroupInfo, error) {
 	resourcesByGroupVersion := make(map[schema.GroupVersion]sets.String)
 	groups := sets.NewString()
-	for gvr := range APIs {
+	for gvr := range apiMap {
 		groups.Insert(gvr.Group)
 		if resourcesByGroupVersion[gvr.GroupVersion()] == nil {
 			resourcesByGroupVersion[gvr.GroupVersion()] = sets.NewString()
@@ -47,7 +46,7 @@ func BuildAPIGroupInfos(scheme *runtime.Scheme, codecs serializer.CodecFactory, 
 	for _, group := range groups.List() {
 		apis := map[string]map[string]rest.Storage{}
 		var err error
-		for gvr, storageProviderFunc := range APIs {
+		for gvr, storageProviderFunc := range apiMap {
 			if gvr.Group == group {
 				if _, found := apis[gvr.Version]; !found {
 					apis[gvr.Version] = map[string]rest.Storage{}

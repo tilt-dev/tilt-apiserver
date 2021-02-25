@@ -43,6 +43,7 @@ func NewServerBuilder() *Server {
 		scheme:  scheme,
 		codecs:  serializer.NewCodecFactory(scheme),
 		storage: map[schema.GroupResource]*singletonProvider{},
+		apis:    map[schema.GroupVersionResource]apiserver.StorageProvider{},
 		serving: &genericoptions.DeprecatedInsecureServingOptions{
 			BindAddress: net.ParseIP("127.0.0.1"),
 		},
@@ -56,6 +57,7 @@ type Server struct {
 	scheme               *runtime.Scheme
 	codecs               serializer.CodecFactory
 	recommendedConfigFns []start.RecommendedConfigFn
+	apis                 map[schema.GroupVersionResource]apiserver.StorageProvider
 	memoryFS             *filepath.MemoryFS
 	errs                 []error
 	storage              map[schema.GroupResource]*singletonProvider
@@ -70,7 +72,7 @@ func (a *Server) buildCodec() (runtime.Codec, error) {
 	a.schemeBuilder.Register(
 		func(scheme *runtime.Scheme) error {
 			groupVersions := make(map[string]sets.String)
-			for gvr := range apiserver.APIs {
+			for gvr := range a.apis {
 				if groupVersions[gvr.Group] == nil {
 					groupVersions[gvr.Group] = sets.NewString()
 				}
@@ -113,7 +115,8 @@ func (a *Server) ToServerOptions() (*start.TiltServerOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	return start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns, a.serving, a.connProvider), nil
+	return start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme,
+		a.codecs, codec, a.recommendedConfigFns, a.apis, a.serving, a.connProvider), nil
 }
 
 // Builds a cobra command that runs the server.
@@ -124,7 +127,8 @@ func (a *Server) ToServerCommand() (*Command, error) {
 		return nil, err
 	}
 
-	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme, a.codecs, codec, a.recommendedConfigFns, a.serving, a.connProvider)
+	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme,
+		a.codecs, codec, a.recommendedConfigFns, a.apis, a.serving, a.connProvider)
 	cmd := start.NewCommandStartTiltServer(o, genericapiserver.SetupSignalHandler())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
 	return cmd, nil

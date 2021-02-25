@@ -58,6 +58,7 @@ func NewScheme() *runtime.Scheme {
 type ExtraConfig struct {
 	Scheme      *runtime.Scheme
 	Codecs      serializer.CodecFactory
+	APIs        map[schema.GroupVersionResource]StorageProvider
 	ServingInfo *genericapiserver.DeprecatedInsecureServingInfo
 	Version     *version.Info
 }
@@ -116,7 +117,7 @@ func (c completedConfig) New() (*TiltServer, error) {
 	}
 
 	// Add new APIs through inserting into APIs
-	apiGroups, err := BuildAPIGroupInfos(c.ExtraConfig.Scheme, c.ExtraConfig.Codecs, c.GenericConfig.RESTOptionsGetter)
+	apiGroups, err := buildAPIGroupInfos(c.ExtraConfig.Scheme, c.ExtraConfig.Codecs, c.ExtraConfig.APIs, c.GenericConfig.RESTOptionsGetter)
 	if err != nil {
 		return nil, err
 	}
