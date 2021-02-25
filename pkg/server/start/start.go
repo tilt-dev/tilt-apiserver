@@ -43,6 +43,7 @@ type TiltServerOptions struct {
 	codecs               serializer.CodecFactory
 	codec                runtime.Codec
 	recommendedConfigFns []RecommendedConfigFn
+	apis                 map[schema.GroupVersionResource]apiserver.StorageProvider
 	ServingOptions       *genericoptions.DeprecatedInsecureServingOptions
 	ConnProvider         apiserver.ConnProvider
 
@@ -57,6 +58,7 @@ func NewTiltServerOptions(
 	codecs serializer.CodecFactory,
 	codec runtime.Codec,
 	recommendedConfigFns []RecommendedConfigFn,
+	apis map[schema.GroupVersionResource]apiserver.StorageProvider,
 	serving *genericoptions.DeprecatedInsecureServingOptions,
 	connProvider apiserver.ConnProvider) *TiltServerOptions {
 	// change: apiserver-runtime
@@ -65,6 +67,7 @@ func NewTiltServerOptions(
 		codecs:               codecs,
 		codec:                codec,
 		recommendedConfigFns: recommendedConfigFns,
+		apis:                 apis,
 		ServingOptions:       serving,
 		ConnProvider:         connProvider,
 
@@ -128,6 +131,7 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 	extraConfig := apiserver.ExtraConfig{
 		Scheme: o.scheme,
 		Codecs: o.codecs,
+		APIs:   o.apis,
 	}
 
 	if o.ConnProvider != nil {

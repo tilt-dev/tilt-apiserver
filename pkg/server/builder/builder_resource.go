@@ -1,7 +1,6 @@
 package builder
 
 import (
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
@@ -58,7 +57,7 @@ func (a *Server) forGroupVersionResource(
 	}
 
 	// add the API with its storage
-	apiserver.APIs[gvr] = sp
+	a.apis[gvr] = sp
 	return a
 }
 
