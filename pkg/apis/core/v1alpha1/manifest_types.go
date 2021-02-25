@@ -19,12 +19,12 @@ package v1alpha1
 import (
 	"context"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource"
-	"sigs.k8s.io/apiserver-runtime/pkg/builder/resource/resourcestrategy"
 )
 
 // +genclient
@@ -52,6 +52,7 @@ type ManifestList struct {
 
 // ManifestSpec defines the desired state of Manifest
 type ManifestSpec struct {
+	Message string `json:"message"`
 }
 
 var _ resource.Object = &Manifest{}
@@ -98,6 +99,7 @@ func (in *ManifestList) GetListMeta() *metav1.ListMeta {
 
 // ManifestStatus defines the observed state of Manifest
 type ManifestStatus struct {
+	Message string `json:"message"`
 }
 
 // Manifest implements ObjectWithStatusSubResource interface.

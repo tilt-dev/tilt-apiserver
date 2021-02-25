@@ -190,6 +190,16 @@ func schema_pkg_apis_core_v1alpha1_ManifestSpec(ref common.ReferenceCallback) co
 			SchemaProps: spec.SchemaProps{
 				Description: "ManifestSpec defines the desired state of Manifest",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"message"},
 			},
 		},
 	}
@@ -201,6 +211,16 @@ func schema_pkg_apis_core_v1alpha1_ManifestStatus(ref common.ReferenceCallback) 
 			SchemaProps: spec.SchemaProps{
 				Description: "ManifestStatus defines the observed state of Manifest",
 				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"message": {
+						SchemaProps: spec.SchemaProps{
+							Default: "",
+							Type:    []string{"string"},
+							Format:  "",
+						},
+					},
+				},
+				Required: []string{"message"},
 			},
 		},
 	}
