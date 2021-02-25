@@ -17,6 +17,7 @@ limitations under the License.
 package start
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -32,6 +33,7 @@ import (
 	genericapiserver "k8s.io/apiserver/pkg/server"
 	genericoptions "k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
 )
 
@@ -41,8 +43,8 @@ type TiltServerOptions struct {
 	codecs               serializer.CodecFactory
 	codec                runtime.Codec
 	recommendedConfigFns []RecommendedConfigFn
-
-	ServingOptions *genericoptions.DeprecatedInsecureServingOptions
+	ServingOptions       *genericoptions.DeprecatedInsecureServingOptions
+	ConnProvider         apiserver.ConnProvider
 
 	stdout io.Writer
 	stderr io.Writer
@@ -54,17 +56,17 @@ func NewTiltServerOptions(
 	scheme *runtime.Scheme,
 	codecs serializer.CodecFactory,
 	codec runtime.Codec,
-	recommendedConfigFns []RecommendedConfigFn) *TiltServerOptions {
+	recommendedConfigFns []RecommendedConfigFn,
+	serving *genericoptions.DeprecatedInsecureServingOptions,
+	connProvider apiserver.ConnProvider) *TiltServerOptions {
 	// change: apiserver-runtime
 	o := &TiltServerOptions{
 		scheme:               scheme,
 		codecs:               codecs,
 		codec:                codec,
 		recommendedConfigFns: recommendedConfigFns,
-
-		ServingOptions: &genericoptions.DeprecatedInsecureServingOptions{
-			BindAddress: net.ParseIP("127.0.0.1"),
-		},
+		ServingOptions:       serving,
+		ConnProvider:         connProvider,
 
 		stdout: out,
 		stderr: errOut,
@@ -127,6 +129,19 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 		Scheme: o.scheme,
 		Codecs: o.codecs,
 	}
+
+	if o.ConnProvider != nil {
+		if o.ServingOptions.BindPort == 0 {
+			o.ServingOptions.BindPort = 80 // Create a fake port.
+		}
+
+		l, err := o.ConnProvider.Listen("memb", fmt.Sprintf("%s:%d", o.ServingOptions.BindAddress, o.ServingOptions.BindPort))
+		if err != nil {
+			return nil, err
+		}
+		o.ServingOptions.Listener = l
+	}
+
 	err := o.ServingOptions.ApplyTo(&extraConfig.ServingInfo)
 	if err != nil {
 		return nil, err
@@ -137,12 +152,7 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 		return nil, fmt.Errorf("internal error: no serve config")
 	}
 	serverConfig.ExternalAddress = serving.Listener.Addr().String()
-
-	loopbackConfig, err := serving.NewLoopbackClientConfig()
-	if err != nil {
-		return nil, err
-	}
-	serverConfig.LoopbackClientConfig = loopbackConfig
+	serverConfig.LoopbackClientConfig = o.LoopbackClientConfig()
 	serverConfig.RESTOptionsGetter = o
 
 	config := &apiserver.Config{
@@ -151,6 +161,24 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 	}
 
 	return config, nil
+}
+
+func (o TiltServerOptions) LoopbackClientConfig() *rest.Config {
+	if o.ServingOptions.BindPort == 0 {
+		panic("internal error: LoopbackClientConfig() cannot be calculated before BindPort set")
+	}
+
+	result := &rest.Config{
+		Host:  fmt.Sprintf("http://%s:%d", o.ServingOptions.BindAddress, o.ServingOptions.BindPort),
+		QPS:   50,
+		Burst: 100,
+	}
+	if o.ConnProvider != nil {
+		result.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+			return o.ConnProvider.DialContext(ctx, "memb", address)
+		}
+	}
+	return result
 }
 
 func (o TiltServerOptions) GetRESTOptions(resource schema.GroupResource) (generic.RESTOptions, error) {
