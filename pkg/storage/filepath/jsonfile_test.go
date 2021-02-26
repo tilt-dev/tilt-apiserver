@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -91,7 +92,8 @@ func newFixture(t *testing.T, fs filepath.FS) *fixture {
 		},
 	}
 
-	provider := filepath.NewJSONFilepathStorageProvider(&Manifest{}, dir, fs)
+	strategy := builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &Manifest{}}
+	provider := filepath.NewJSONFilepathStorageProvider(&Manifest{}, dir, fs, strategy)
 	storage, err := provider(scheme, options)
 	require.NoError(t, err)
 

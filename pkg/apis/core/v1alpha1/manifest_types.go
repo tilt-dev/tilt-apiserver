@@ -52,6 +52,7 @@ type ManifestList struct {
 
 // ManifestSpec defines the desired state of Manifest
 type ManifestSpec struct {
+	Message string `json:"message"`
 }
 
 var _ resource.Object = &Manifest{}
@@ -98,6 +99,7 @@ func (in *ManifestList) GetListMeta() *metav1.ListMeta {
 
 // ManifestStatus defines the observed state of Manifest
 type ManifestStatus struct {
+	Message string `json:"message"`
 }
 
 // Manifest implements ObjectWithStatusSubResource interface.

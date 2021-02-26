@@ -23,6 +23,7 @@ import (
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 
 	"github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
 )
 
@@ -146,7 +147,8 @@ func newRESTFixture(t *testing.T) *restFixture {
 	sp := filepath.NewJSONFilepathStorageProvider(
 		&obj,
 		dir,
-		fs)
+		fs,
+		builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &obj})
 
 	codec := serializer.NewCodecFactory(scheme).LegacyCodec(v1alpha1.SchemeGroupVersion)
 	opts := &restOptionsGetter{codec: codec}
