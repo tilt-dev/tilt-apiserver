@@ -10,6 +10,7 @@ import (
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	"github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned"
 	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -58,7 +59,7 @@ func TestBindToPort9444(t *testing.T) {
 }
 
 func TestMemConn(t *testing.T) {
-	connProvider := &memconn.Provider{}
+	connProvider := memConnProvider()
 	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
@@ -90,7 +91,7 @@ func TestMemConn(t *testing.T) {
 }
 
 func TestUpdateStatusDoesNotUpdateSpec(t *testing.T) {
-	connProvider := &memconn.Provider{}
+	connProvider := memConnProvider()
 	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
@@ -129,7 +130,7 @@ func TestUpdateStatusDoesNotUpdateSpec(t *testing.T) {
 }
 
 func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
-	connProvider := &memconn.Provider{}
+	connProvider := memConnProvider()
 	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
@@ -165,4 +166,8 @@ func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
 
 	cancel()
 	<-stoppedCh
+}
+
+func memConnProvider() apiserver.ConnProvider {
+	return apiserver.NetworkConnProvider(&memconn.Provider{}, "memb")
 }
