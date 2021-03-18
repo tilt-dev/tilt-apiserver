@@ -92,8 +92,9 @@ func newFixture(t *testing.T, fs filepath.FS) *fixture {
 		},
 	}
 
+	ws := filepath.NewWatchSet()
 	strategy := builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &Manifest{}}
-	provider := filepath.NewJSONFilepathStorageProvider(&Manifest{}, dir, fs, strategy)
+	provider := filepath.NewJSONFilepathStorageProvider(&Manifest{}, dir, fs, ws, strategy)
 	storage, err := provider(scheme, options)
 	require.NoError(t, err)
 

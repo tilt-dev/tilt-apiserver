@@ -134,6 +134,7 @@ func newRESTFixture(t *testing.T) *restFixture {
 	t.Helper()
 
 	fs := filepath.NewMemoryFS()
+	ws := filepath.NewWatchSet()
 
 	dir, err := ioutil.TempDir("", strings.Replace(t.Name(), "/", "_", -1))
 	require.NoError(t, err)
@@ -148,6 +149,7 @@ func newRESTFixture(t *testing.T) *restFixture {
 		&obj,
 		dir,
 		fs,
+		ws,
 		builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &obj})
 
 	codec := serializer.NewCodecFactory(scheme).LegacyCodec(v1alpha1.SchemeGroupVersion)
