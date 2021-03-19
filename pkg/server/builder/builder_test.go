@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/akutz/memconn"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,7 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
 )
 
 func TestBindToPort0(t *testing.T) {
@@ -98,6 +100,37 @@ func TestUpdateStatusDoesNotUpdateSpec(t *testing.T) {
 	assert.Equal(t, "status message", obj.Status.Message)
 }
 
+func TestWatchStatusUpdate(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	client := f.client
+	newObj, err := client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	watch, err := client.CoreV1alpha1().Manifests().Watch(f.ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	defer watch.Stop()
+
+	obj := f.nextResult(watch)
+	assert.Equal(t, "my-server", obj.Name)
+
+	ch := make(chan error)
+	go func() {
+		newObj.Status.Message = "status message"
+		_, err = client.CoreV1alpha1().Manifests().UpdateStatus(f.ctx, newObj, metav1.UpdateOptions{})
+		ch <- err
+	}()
+
+	require.NoError(t, <-ch)
+
+	obj = f.nextResult(watch)
+	assert.Equal(t, "my-server", obj.Name)
+	assert.Equal(t, "status message", obj.Status.Message)
+}
+
 func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
@@ -177,7 +210,7 @@ func TestCreateValidation(t *testing.T) {
 }
 
 func memConnProvider() apiserver.ConnProvider {
-	return apiserver.NetworkConnProvider(&memconn.Provider{}, "memb")
+	return apiserver.NetworkConnProvider(&memconn.Provider{}, "memu")
 }
 
 type fixture struct {
@@ -212,6 +245,23 @@ func newFixture(t *testing.T) *fixture {
 		stoppedCh: stoppedCh,
 		client:    client,
 	}
+}
+
+func (f *fixture) nextResult(i watch.Interface) *corev1alpha1.Manifest {
+	select {
+	case e := <-i.ResultChan():
+		obj := e.Object
+		m, ok := obj.(*corev1alpha1.Manifest)
+		if !ok {
+			require.Failf(f.t, "Unexpected object", "Object type: %T", obj)
+			return nil
+		}
+		return m
+	case <-time.After(time.Second):
+		require.Fail(f.t, "timeout waiting for next watch result")
+		return nil
+	}
+
 }
 
 func (f *fixture) tearDown() {
