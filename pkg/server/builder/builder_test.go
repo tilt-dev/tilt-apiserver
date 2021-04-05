@@ -14,6 +14,7 @@ import (
 	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -152,6 +153,17 @@ func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
 	assert.False(t, obj.CreationTimestamp.Time.IsZero())
 	assert.Equal(t, "spec message", obj.Spec.Message)
 	assert.Equal(t, "", obj.Status.Message)
+}
+
+func TestDelete(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	client := f.client
+	err := client.CoreV1alpha1().Manifests().Delete(f.ctx, "my-server", metav1.DeleteOptions{})
+	if assert.Error(t, err) {
+		assert.True(t, apierrors.IsNotFound(err), err.Error())
+	}
 }
 
 type createTestCase struct {

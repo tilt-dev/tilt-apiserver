@@ -69,6 +69,16 @@ func TestCreateThenReadThenDelete(t *testing.T) {
 	}
 }
 
+func TestDelete(t *testing.T) {
+	for _, fs := range fileSystems() {
+		t.Run(fmt.Sprintf("%T", fs), func(t *testing.T) {
+			f := newFixture(t, fs)
+			defer f.TearDown()
+			f.TestDelete()
+		})
+	}
+}
+
 type fixture struct {
 	t       *testing.T
 	dir     string
@@ -161,6 +171,13 @@ func (f *fixture) TestCreateThenReadThenDelete() {
 	require.NoError(f.t, err)
 
 	_, err = f.storage.Get(context.Background(), "my-manifest", &metav1.GetOptions{})
+	if assert.Error(f.t, err) {
+		assert.True(f.t, apierrors.IsNotFound(err))
+	}
+}
+
+func (f *fixture) TestDelete() {
+	_, _, err := f.storage.Delete(context.Background(), "my-manifest", nil, &metav1.DeleteOptions{})
 	if assert.Error(f.t, err) {
 		assert.True(f.t, apierrors.IsNotFound(err))
 	}
