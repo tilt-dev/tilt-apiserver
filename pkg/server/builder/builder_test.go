@@ -19,7 +19,10 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/transport"
 )
+
+const fakeBearerToken = "fake-bearer-token"
 
 func TestBindToPort0(t *testing.T) {
 	builder := builder.NewServerBuilder().
@@ -37,6 +40,7 @@ func TestBindToPort9444(t *testing.T) {
 	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
+		WithBearerToken(fakeBearerToken).
 		WithBindPort(port)
 	options, err := builder.ToServerOptions()
 	require.NoError(t, err)
@@ -44,10 +48,13 @@ func TestBindToPort9444(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	stoppedCh, err := options.RunTiltServer(ctx.Done())
+	config, err := options.Config()
 	require.NoError(t, err)
 
-	client, err := versioned.NewForConfig(options.LoopbackClientConfig())
+	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx.Done())
+	require.NoError(t, err)
+
+	client, err := versioned.NewForConfig(config.GenericConfig.LoopbackClientConfig)
 	require.NoError(t, err)
 
 	_, err = client.CoreV1alpha1().Manifests().Create(ctx, &corev1alpha1.Manifest{
@@ -78,6 +85,28 @@ func TestMemConn(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, obj.Name, "my-server")
 	assert.False(t, obj.CreationTimestamp.Time.IsZero())
+}
+
+func TestUnauthorizedAccess(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	loopback := f.config.GenericConfig.LoopbackClientConfig
+	loopback.BearerToken = "bad-bearer-token"
+	client, err := versioned.NewForConfig(loopback)
+	require.NoError(t, err)
+
+	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+	}, metav1.CreateOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "Everything is forbidden")
+	}
+
+	_, err = client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "Everything is forbidden")
+	}
 }
 
 func TestUpdateStatusDoesNotUpdateSpec(t *testing.T) {
@@ -227,11 +256,12 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
 
-	tr := &http.Transport{
-		DialContext: f.connProvider.DialContext,
-	}
+	trConfig, err := f.config.GenericConfig.LoopbackClientConfig.TransportConfig()
+	require.NoError(t, err)
+	tr, err := transport.New(trConfig)
+	require.NoError(t, err)
 	client := &http.Client{Transport: tr}
-	resp, err := client.Get("http://127.0.0.1:80/openapi/v2")
+	resp, err := client.Get("https://127.0.0.1:443/openapi/v2")
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -251,12 +281,12 @@ func memConnProvider() apiserver.ConnProvider {
 }
 
 type fixture struct {
-	t            *testing.T
-	ctx          context.Context
-	cancel       func()
-	stoppedCh    <-chan struct{}
-	client       *versioned.Clientset
-	connProvider apiserver.ConnProvider
+	t         *testing.T
+	ctx       context.Context
+	cancel    func()
+	stoppedCh <-chan struct{}
+	client    *versioned.Clientset
+	config    *apiserver.Config
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -264,25 +294,29 @@ func newFixture(t *testing.T) *fixture {
 	builder := builder.NewServerBuilder().
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
-		WithConnProvider(connProvider)
+		WithConnProvider(connProvider).
+		WithBearerToken(fakeBearerToken)
 	options, err := builder.ToServerOptions()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	stoppedCh, err := options.RunTiltServer(ctx.Done())
+	config, err := options.Config()
 	require.NoError(t, err)
 
-	client, err := versioned.NewForConfig(options.LoopbackClientConfig())
+	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx.Done())
+	require.NoError(t, err)
+
+	client, err := versioned.NewForConfig(config.GenericConfig.LoopbackClientConfig)
 	require.NoError(t, err)
 
 	return &fixture{
-		t:            t,
-		ctx:          ctx,
-		cancel:       cancel,
-		stoppedCh:    stoppedCh,
-		client:       client,
-		connProvider: connProvider,
+		t:         t,
+		ctx:       ctx,
+		cancel:    cancel,
+		stoppedCh: stoppedCh,
+		client:    client,
+		config:    config,
 	}
 }
 
