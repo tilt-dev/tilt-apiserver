@@ -3,6 +3,8 @@ package builder_test
 import (
 	"context"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"testing"
 	"time"
 
@@ -221,16 +223,37 @@ func TestCreateValidation(t *testing.T) {
 	}
 }
 
+func TestValidateOpenAPISpec(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	tr := &http.Transport{
+		DialContext: f.connProvider.DialContext,
+	}
+	client := &http.Client{Transport: tr}
+	resp, err := client.Get("http://127.0.0.1:80/openapi/v2")
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	contentBytes, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	content := string(contentBytes)
+	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
+	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
+}
+
 func memConnProvider() apiserver.ConnProvider {
 	return apiserver.NetworkConnProvider(&memconn.Provider{}, "memu")
 }
 
 type fixture struct {
-	t         *testing.T
-	ctx       context.Context
-	cancel    func()
-	stoppedCh <-chan struct{}
-	client    *versioned.Clientset
+	t            *testing.T
+	ctx          context.Context
+	cancel       func()
+	stoppedCh    <-chan struct{}
+	client       *versioned.Clientset
+	connProvider apiserver.ConnProvider
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -251,11 +274,12 @@ func newFixture(t *testing.T) *fixture {
 	require.NoError(t, err)
 
 	return &fixture{
-		t:         t,
-		ctx:       ctx,
-		cancel:    cancel,
-		stoppedCh: stoppedCh,
-		client:    client,
+		t:            t,
+		ctx:          ctx,
+		cancel:       cancel,
+		stoppedCh:    stoppedCh,
+		client:       client,
+		connProvider: connProvider,
 	}
 }
 
