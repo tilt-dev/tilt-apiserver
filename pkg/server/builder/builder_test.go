@@ -19,6 +19,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
 )
 
@@ -91,7 +92,7 @@ func TestUnauthorizedAccess(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
 
-	loopback := f.config.GenericConfig.LoopbackClientConfig
+	loopback := rest.CopyConfig(f.config.GenericConfig.LoopbackClientConfig)
 	loopback.BearerToken = "bad-bearer-token"
 	client, err := versioned.NewForConfig(loopback)
 	require.NoError(t, err)
@@ -106,6 +107,28 @@ func TestUnauthorizedAccess(t *testing.T) {
 	_, err = client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "Everything is forbidden")
+	}
+}
+
+func TestMissingCertData(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	loopback := rest.CopyConfig(f.config.GenericConfig.LoopbackClientConfig)
+	loopback.TLSClientConfig.CAData = nil
+	client, err := versioned.NewForConfig(loopback)
+	require.NoError(t, err)
+
+	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+	}, metav1.CreateOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "x509: certificate signed by unknown authority")
+	}
+
+	_, err = client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "x509: certificate signed by unknown authority")
 	}
 }
 

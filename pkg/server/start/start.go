@@ -34,6 +34,7 @@ import (
 	"k8s.io/apiserver/pkg/authorization/authorizerfactory"
 	"k8s.io/apiserver/pkg/registry/generic"
 	genericapiserver "k8s.io/apiserver/pkg/server"
+	"k8s.io/apiserver/pkg/server/dynamiccertificates"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
@@ -172,7 +173,8 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 	serverConfig.Authentication = genericapiserver.AuthenticationInfo{
 		Authenticator: anonymous.NewAuthenticator(),
 	}
-	serverConfig.LoopbackClientConfig = o.loopbackClientConfig()
+
+	serverConfig.LoopbackClientConfig = o.loopbackClientConfig(extraConfig.ServingInfo.Cert)
 	serverConfig.RESTOptionsGetter = o
 
 	config := &apiserver.Config{
@@ -183,17 +185,21 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 	return config, nil
 }
 
-func (o TiltServerOptions) loopbackClientConfig() *rest.Config {
+func (o TiltServerOptions) loopbackClientConfig(cert dynamiccertificates.CertKeyContentProvider) *rest.Config {
 	if o.ServingOptions.BindPort == 0 {
 		panic("internal error: LoopbackClientConfig() cannot be calculated before BindPort set")
 	}
 
+	caData, _ := cert.CurrentCertKeyContent()
+
 	result := &rest.Config{
-		Host:            fmt.Sprintf("https://%s:%d", o.ServingOptions.BindAddress, o.ServingOptions.BindPort),
-		QPS:             50,
-		Burst:           100,
-		TLSClientConfig: rest.TLSClientConfig{Insecure: true},
-		BearerToken:     o.ServingOptions.BearerToken,
+		Host:  fmt.Sprintf("https://%s:%d", o.ServingOptions.BindAddress, o.ServingOptions.BindPort),
+		QPS:   50,
+		Burst: 100,
+		TLSClientConfig: rest.TLSClientConfig{
+			CAData: caData,
+		},
+		BearerToken: o.ServingOptions.BearerToken,
 	}
 	if o.ConnProvider != nil {
 		result.Dial = func(ctx context.Context, network, address string) (net.Conn, error) {

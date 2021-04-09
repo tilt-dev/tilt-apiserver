@@ -115,8 +115,8 @@ func NewSecureServingOptions() *SecureServingOptions {
 		BindAddress: net.ParseIP("0.0.0.0"),
 		BindPort:    443,
 		ServerCert: GeneratableKeyCert{
-			PairName:      "apiserver",
-			CertDirectory: "apiserver.local.config/certificates",
+			PairName:      "tilt-apiserver",
+			CertDirectory: "tilt-apiserver.local.config/certificates",
 		},
 	}
 }
