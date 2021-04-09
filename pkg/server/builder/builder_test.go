@@ -241,6 +241,9 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	content := string(contentBytes)
 	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
 	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
+	assert.Contains(t, content,
+		`"x-kubernetes-group-version-kind":[{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}]`)
+	assert.NotContains(t, content, `__internal`)
 }
 
 func memConnProvider() apiserver.ConnProvider {
