@@ -8,7 +8,7 @@ test:
 
 # Run the apiserver locally
 run-apiserver:
-	go run ./cmd/apiserver/main.go --insecure-port=9443
+	go run ./cmd/apiserver/main.go --secure-port=9443 --token=corgi-charge
 
 vendor:
 	go mod vendor

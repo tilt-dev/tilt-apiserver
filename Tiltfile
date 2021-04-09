@@ -8,7 +8,6 @@ local_resource(
 local_resource(
   'apiserver',
   serve_cmd='make run-apiserver',
-  links=['http://localhost:9443'],
   readiness_probe=probe(http_get=http_get_action(port=9443, path='/readyz')))
 
 local_resource(

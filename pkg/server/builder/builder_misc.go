@@ -47,3 +47,9 @@ func (a *Server) WithOutputWriter(out io.Writer) *Server {
 	a.stderr = out
 	return a
 }
+
+// WithBearerToken sets up an auth token that's needed to send server requests.
+func (a *Server) WithBearerToken(token string) *Server {
+	a.serving.BearerToken = token
+	return a
+}
