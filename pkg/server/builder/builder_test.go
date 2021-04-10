@@ -16,6 +16,8 @@ import (
 	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/options"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/testdata"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/watch"
@@ -42,7 +44,8 @@ func TestBindToPort9444(t *testing.T) {
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
 		WithBearerToken(fakeBearerToken).
-		WithBindPort(port)
+		WithBindPort(port).
+		WithCertKey(options.GeneratableKeyCert{}) // Let the builder framework generate certs
 	options, err := builder.ToServerOptions()
 	require.NoError(t, err)
 
@@ -318,7 +321,8 @@ func newFixture(t *testing.T) *fixture {
 		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
 		WithConnProvider(connProvider).
-		WithBearerToken(fakeBearerToken)
+		WithBearerToken(fakeBearerToken).
+		WithCertKey(testdata.CertKey())
 	options, err := builder.ToServerOptions()
 	require.NoError(t, err)
 
