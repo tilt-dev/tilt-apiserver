@@ -4,6 +4,7 @@ import (
 	"io"
 
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/options"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
 	openapicommon "k8s.io/kube-openapi/pkg/common"
 )
@@ -51,5 +52,16 @@ func (a *Server) WithOutputWriter(out io.Writer) *Server {
 // WithBearerToken sets up an auth token that's needed to send server requests.
 func (a *Server) WithBearerToken(token string) *Server {
 	a.serving.BearerToken = token
+	return a
+}
+
+// WithCertKey injects options for a certificate-key pair that the server will
+// use to identify itself. If no pair is provided, the server will automatically
+// generate one a self-signed one for "localhost".
+//
+// Note that generating a certificate is expensive. A test certificate is provided
+// under testdata.
+func (a *Server) WithCertKey(certKey options.GeneratableKeyCert) *Server {
+	a.serving.ServerCert = certKey
 	return a
 }

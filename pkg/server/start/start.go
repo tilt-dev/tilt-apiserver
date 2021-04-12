@@ -140,8 +140,8 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 		o.ServingOptions.Listener = l
 	}
 
-	// TODO(nick): Currently, we discourage verification of the host in the certificate.
-	// If this ever changes, we'll want to inject the host here.
+	// Check to see if any certificates have been provided.
+	// If none have been provided, create one now.
 	err := o.ServingOptions.MaybeDefaultWithSelfSignedCerts(
 		"localhost", nil, []net.IP{net.ParseIP("127.0.0.1")})
 	if err != nil {
@@ -174,7 +174,12 @@ func (o *TiltServerOptions) Config() (*apiserver.Config, error) {
 		Authenticator: anonymous.NewAuthenticator(),
 	}
 
-	serverConfig.LoopbackClientConfig = o.loopbackClientConfig(extraConfig.ServingInfo.Cert)
+	cert := extraConfig.ServingInfo.Cert
+	if cert == nil {
+		return nil, fmt.Errorf("Unable to generate certificates")
+	}
+
+	serverConfig.LoopbackClientConfig = o.loopbackClientConfig(cert)
 	serverConfig.RESTOptionsGetter = o
 
 	config := &apiserver.Config{
@@ -244,7 +249,7 @@ func (o TiltServerOptions) RunTiltServerFromConfig(config apiserver.CompletedCon
 	prepared := server.GenericAPIServer.PrepareRun()
 	serving := config.ExtraConfig.ServingInfo
 
-	tlsConfig, err := TLSConfig(WarnFunc(klog.Warningf), serving, stopCh)
+	tlsConfig, err := TLSConfig(serving)
 	if err != nil {
 		return nil, err
 	}

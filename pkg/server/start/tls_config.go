@@ -22,6 +22,7 @@ package start
 
 import (
 	"crypto/tls"
+	"fmt"
 
 	"k8s.io/apiserver/pkg/server"
 	"k8s.io/apiserver/pkg/server/dynamiccertificates"
@@ -39,7 +40,11 @@ func (f WarnFunc) Warnf(tpl string, args ...interface{}) {
 }
 
 // tlsConfig produces the tls.Config to serve with.
-func TLSConfig(warn Warn, s *server.SecureServingInfo, stopCh <-chan struct{}) (*tls.Config, error) {
+//
+// Loads all the certs once at startup, then never reloads them again.
+// This is different than a typical Kubernetes config, which periodically
+// checks for cert updates.
+func TLSConfig(s *server.SecureServingInfo) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		// Can't use SSLv3 because of POODLE and BEAST
 		// Can't use TLSv1.0 because of POODLE and BEAST using CBC cipher
@@ -62,7 +67,7 @@ func TLSConfig(warn Warn, s *server.SecureServingInfo, stopCh <-chan struct{}) (
 		for i := 0; i < len(s.CipherSuites); i++ {
 			for cipherName, cipherID := range insecureCiphers {
 				if s.CipherSuites[i] == cipherID {
-					warn.Warnf("Use of insecure cipher '%s' detected.", cipherName)
+					return nil, fmt.Errorf("Use of insecure cipher '%s' detected.", cipherName)
 				}
 			}
 		}
@@ -94,19 +99,15 @@ func TLSConfig(warn Warn, s *server.SecureServingInfo, stopCh <-chan struct{}) (
 			// runonce to try to prime data.  If this fails, it's ok because we fail closed.
 			// Files are required to be populated already, so this is for convenience.
 			if err := controller.RunOnce(); err != nil {
-				warn.Warnf("Initial population of client CA failed: %v", err)
+				return nil, fmt.Errorf("Initial population of client CA failed: %v", err)
 			}
-
-			go controller.Run(1, stopCh)
 		}
 		if controller, ok := s.Cert.(dynamiccertificates.ControllerRunner); ok {
 			// runonce to try to prime data.  If this fails, it's ok because we fail closed.
 			// Files are required to be populated already, so this is for convenience.
 			if err := controller.RunOnce(); err != nil {
-				warn.Warnf("Initial population of default serving certificate failed: %v", err)
+				return nil, fmt.Errorf("Initial population of default serving certificate failed: %v", err)
 			}
-
-			go controller.Run(1, stopCh)
 		}
 		for _, sniCert := range s.SNICerts {
 			if notifier, ok := sniCert.(dynamiccertificates.Notifier); ok {
@@ -117,19 +118,16 @@ func TLSConfig(warn Warn, s *server.SecureServingInfo, stopCh <-chan struct{}) (
 				// runonce to try to prime data.  If this fails, it's ok because we fail closed.
 				// Files are required to be populated already, so this is for convenience.
 				if err := controller.RunOnce(); err != nil {
-					warn.Warnf("Initial population of SNI serving certificate failed: %v", err)
+					return nil, fmt.Errorf("Initial population of SNI serving certificate failed: %v", err)
 				}
-
-				go controller.Run(1, stopCh)
 			}
 		}
 
 		// runonce to try to prime data.  If this fails, it's ok because we fail closed.
 		// Files are required to be populated already, so this is for convenience.
 		if err := dynamicCertificateController.RunOnce(); err != nil {
-			warn.Warnf("Initial population of dynamic certificates failed: %v", err)
+			return nil, fmt.Errorf("Initial population of dynamic certificates failed: %v", err)
 		}
-		go dynamicCertificateController.Run(1, stopCh)
 
 		tlsConfig.GetConfigForClient = dynamicCertificateController.GetConfigForClient
 	}
