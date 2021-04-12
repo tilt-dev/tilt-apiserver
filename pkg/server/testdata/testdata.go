@@ -11,7 +11,6 @@ import (
 func CertKey() options.GeneratableKeyCert {
 	_, curFile, _, _ := runtime.Caller(0)
 	return options.GeneratableKeyCert{
-		CertDirectory: filepath.Dir(curFile),
-		PairName:      "test",
+		FixtureDirectory: filepath.Dir(curFile),
 	}
 }
