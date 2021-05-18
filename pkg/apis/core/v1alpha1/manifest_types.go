@@ -20,6 +20,7 @@ import (
 	"context"
 
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcerest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -57,6 +58,7 @@ type ManifestSpec struct {
 
 var _ resource.Object = &Manifest{}
 var _ resourcestrategy.Validater = &Manifest{}
+var _ resourcerest.ShortNamesProvider = &Manifest{}
 
 func (in *Manifest) GetObjectMeta() *metav1.ObjectMeta {
 	return &in.ObjectMeta
@@ -72,6 +74,10 @@ func (in *Manifest) New() runtime.Object {
 
 func (in *Manifest) NewList() runtime.Object {
 	return &ManifestList{}
+}
+
+func (in *Manifest) ShortNames() []string {
+	return []string{"m"}
 }
 
 func (in *Manifest) GetGroupVersionResource() schema.GroupVersionResource {
