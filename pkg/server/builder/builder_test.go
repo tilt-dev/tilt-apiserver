@@ -189,6 +189,35 @@ func TestWatchStatusUpdate(t *testing.T) {
 	assert.Equal(t, "status message", obj.Status.Message)
 }
 
+func TestWatchLotsOfServers(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	client := f.client
+	for i := 0; i < 20; i++ {
+		_, err := client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("my-server-%d", i)},
+		}, metav1.CreateOptions{})
+		require.NoError(t, err)
+	}
+
+	watch, err := client.CoreV1alpha1().Manifests().Watch(f.ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	defer watch.Stop()
+
+	for i := 0; i < 5; i++ {
+		_, err := client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("my-server-%d", i+20)},
+		}, metav1.CreateOptions{})
+		require.NoError(t, err)
+	}
+
+	for i := 0; i < 25; i++ {
+		obj := f.nextResult(watch)
+		assert.Contains(t, obj.Name, "my-server")
+	}
+}
+
 func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
