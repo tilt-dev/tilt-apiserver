@@ -38,8 +38,7 @@ type ManifestReconciler struct {
 // +kubebuilder:rbac:groups=,resources=manifests/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=,resources=manifests/finalizers,verbs=update
 
-func (r *ManifestReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
-	_ = context.Background()
+func (r *ManifestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = r.Log.WithValues("manifest", req.NamespacedName)
 
 	// your logic here
