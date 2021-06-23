@@ -331,6 +331,48 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	assert.NotContains(t, content, `__internal`)
 }
 
+func TestLabelSelector(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	client := f.client
+
+	_, err := client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "foo-1",
+			Labels: map[string]string{"group": "foo"},
+		},
+	}, metav1.CreateOptions{})
+
+	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "foo-2",
+			Labels: map[string]string{"group": "foo"},
+		},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "bar-1",
+			Labels: map[string]string{"group": "bar"},
+		},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	list, err := client.CoreV1alpha1().Manifests().List(f.ctx, metav1.ListOptions{
+		LabelSelector: "group=foo",
+	})
+	require.NoError(t, err)
+
+	names := []string{}
+	for _, item := range list.Items {
+		names = append(names, item.Name)
+	}
+
+	assert.ElementsMatch(t, []string{"foo-1", "foo-2"}, names)
+}
+
 func memConnProvider() apiserver.ConnProvider {
 	return apiserver.NetworkConnProvider(&memconn.Provider{}, "memu")
 }
