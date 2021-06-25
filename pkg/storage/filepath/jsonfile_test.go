@@ -13,8 +13,11 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
+	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/internalversion"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -75,6 +78,26 @@ func TestDelete(t *testing.T) {
 			f := newFixture(t, fs)
 			defer f.TearDown()
 			f.TestDelete()
+		})
+	}
+}
+
+func TestListLabelSelector(t *testing.T) {
+	for _, fs := range fileSystems() {
+		t.Run(fmt.Sprintf("%T", fs), func(t *testing.T) {
+			f := newFixture(t, fs)
+			defer f.TearDown()
+			f.TestListLabelSelector()
+		})
+	}
+}
+
+func TestWatchLabelSelector(t *testing.T) {
+	for _, fs := range fileSystems() {
+		t.Run(fmt.Sprintf("%T", fs), func(t *testing.T) {
+			f := newFixture(t, fs)
+			defer f.TearDown()
+			f.TestWatchLabelSelector()
 		})
 	}
 }
@@ -181,6 +204,68 @@ func (f *fixture) TestDelete() {
 	if assert.Error(f.t, err) {
 		assert.True(f.t, apierrors.IsNotFound(err))
 	}
+}
+
+func (f *fixture) TestListLabelSelector() {
+	_, err := f.storage.Create(context.Background(), &Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "foo-1", Labels: map[string]string{"group": "foo"}},
+	}, nil, &metav1.CreateOptions{})
+	require.NoError(f.t, err)
+	_, err = f.storage.Create(context.Background(), &Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "bar-1", Labels: map[string]string{"group": "bar"}},
+	}, nil, &metav1.CreateOptions{})
+	require.NoError(f.t, err)
+
+	list, err := f.storage.List(context.Background(), &internalversion.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{"group": "bar"}),
+	})
+	require.NoError(f.t, err)
+
+	mList := list.(*ManifestList)
+	require.Equal(f.t, 1, len(mList.Items))
+	assert.Equal(f.t, "bar-1", mList.Items[0].Name)
+}
+
+func (f *fixture) TestWatchLabelSelector() {
+	ctx := context.Background()
+	w, err := f.storage.Watch(ctx, &internalversion.ListOptions{
+		LabelSelector: labels.SelectorFromSet(labels.Set{"group": "foo"}),
+	})
+	require.NoError(f.t, err)
+	defer w.Stop()
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		_, err = f.storage.Create(ctx, &Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: "foo-1", Labels: map[string]string{"group": "foo"}},
+		}, nil, &metav1.CreateOptions{})
+
+		if err != nil {
+			return err
+		}
+
+		_, err = f.storage.Create(ctx, &Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: "bar-1", Labels: map[string]string{"group": "bar"}},
+		}, nil, &metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+
+		_, err = f.storage.Create(ctx, &Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: "foo-2", Labels: map[string]string{"group": "foo"}},
+		}, nil, &metav1.CreateOptions{})
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+
+	evt := <-w.ResultChan()
+	assert.Equal(f.t, "foo-1", evt.Object.(*Manifest).Name)
+	evt = <-w.ResultChan()
+	assert.Equal(f.t, "foo-2", evt.Object.(*Manifest).Name)
+
+	require.NoError(f.t, g.Wait())
 }
 
 func (f *fixture) TearDown() {
