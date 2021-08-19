@@ -274,9 +274,8 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			ip.selectors[gvk].ApplyToList(&opts)
 			res := listObj.DeepCopyObject()
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			isNamespaceScoped := namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			err := client.Get().NamespaceIfScoped(namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do(ctx).Into(res)
+			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
+			err := client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Do(ctx).Into(res)
 			return res, err
 		},
 		// Setup the watch function
@@ -284,9 +283,8 @@ func createStructuredListWatch(gvk schema.GroupVersionKind, ip *specificInformer
 			ip.selectors[gvk].ApplyToList(&opts)
 			// Watch needs to be set to true separately
 			opts.Watch = true
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			isNamespaceScoped := namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
-			return client.Get().NamespaceIfScoped(namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch(ctx)
+			isNamespaceScoped := ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot
+			return client.Get().NamespaceIfScoped(ip.namespace, isNamespaceScoped).Resource(mapping.Resource.Resource).VersionedParams(&opts, ip.paramCodec).Watch(ctx)
 		},
 	}, nil
 }
@@ -315,9 +313,8 @@ func createUnstructuredListWatch(gvk schema.GroupVersionKind, ip *specificInform
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			ip.selectors[gvk].ApplyToList(&opts)
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			if namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(namespace).List(ctx, opts)
+			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).List(ctx, opts)
 			}
 			return dynamicClient.Resource(mapping.Resource).List(ctx, opts)
 		},
@@ -326,9 +323,8 @@ func createUnstructuredListWatch(gvk schema.GroupVersionKind, ip *specificInform
 			ip.selectors[gvk].ApplyToList(&opts)
 			// Watch needs to be set to true separately
 			opts.Watch = true
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			if namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return dynamicClient.Resource(mapping.Resource).Namespace(namespace).Watch(ctx, opts)
+			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
+				return dynamicClient.Resource(mapping.Resource).Namespace(ip.namespace).Watch(ctx, opts)
 			}
 			return dynamicClient.Resource(mapping.Resource).Watch(ctx, opts)
 		},
@@ -362,9 +358,8 @@ func createMetadataListWatch(gvk schema.GroupVersionKind, ip *specificInformersM
 	return &cache.ListWatch{
 		ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 			ip.selectors[gvk].ApplyToList(&opts)
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			if namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return client.Resource(mapping.Resource).Namespace(namespace).List(ctx, opts)
+			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
+				return client.Resource(mapping.Resource).Namespace(ip.namespace).List(ctx, opts)
 			}
 			return client.Resource(mapping.Resource).List(ctx, opts)
 		},
@@ -373,9 +368,8 @@ func createMetadataListWatch(gvk schema.GroupVersionKind, ip *specificInformersM
 			ip.selectors[gvk].ApplyToList(&opts)
 			// Watch needs to be set to true separately
 			opts.Watch = true
-			namespace := restrictNamespaceBySelector(ip.namespace, ip.selectors[gvk])
-			if namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
-				return client.Resource(mapping.Resource).Namespace(namespace).Watch(ctx, opts)
+			if ip.namespace != "" && mapping.Scope.Name() != meta.RESTScopeNameRoot {
+				return client.Resource(mapping.Resource).Namespace(ip.namespace).Watch(ctx, opts)
 			}
 			return client.Resource(mapping.Resource).Watch(ctx, opts)
 		},
@@ -391,24 +385,4 @@ func resyncPeriod(resync time.Duration) func() time.Duration {
 		factor := rand.Float64()/5.0 + 0.9 //nolint:gosec
 		return time.Duration(float64(resync.Nanoseconds()) * factor)
 	}
-}
-
-// restrictNamespaceBySelector returns either a global restriction for all ListWatches
-// if not default/empty, or the namespace that a ListWatch for the specific resource
-// is restricted to, based on a specified field selector for metadata.namespace field.
-func restrictNamespaceBySelector(namespaceOpt string, s Selector) string {
-	if namespaceOpt != "" {
-		// namespace is already restricted
-		return namespaceOpt
-	}
-	fieldSelector := s.Field
-	if fieldSelector == nil || fieldSelector.Empty() {
-		return ""
-	}
-	// check whether a selector includes the namespace field
-	value, found := fieldSelector.RequiresExactMatch("metadata.namespace")
-	if found {
-		return value
-	}
-	return ""
 }
