@@ -20,6 +20,8 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/testdata"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
@@ -252,6 +254,26 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestPatch(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	client := f.client
+	_, err := client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+	}, metav1.CreateOptions{})
+	require.NoError(t, err)
+
+	patch := `{"metadata": {"labels": {"my-label": "my-label-value"}}}`
+	_, err = client.CoreV1alpha1().Manifests().Patch(f.ctx, "my-server", types.StrategicMergePatchType, []byte(patch), v1.PatchOptions{})
+	require.NoError(t, err)
+
+	obj, err := client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, "my-server", obj.Name)
+	assert.Equal(t, "my-label-value", obj.GetLabels()["my-label"])
+}
+
 type createTestCase struct {
 	name       string
 	labelKey   string
@@ -327,8 +349,7 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
 	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
 	assert.Contains(t, content,
-		`"x-kubernetes-group-version-kind":[{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}]`)
-	assert.NotContains(t, content, `__internal`)
+		`{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}`)
 }
 
 func TestLabelSelector(t *testing.T) {
