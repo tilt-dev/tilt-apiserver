@@ -349,7 +349,8 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
 	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
 	assert.Contains(t, content,
-		`{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}`)
+		`"x-kubernetes-group-version-kind":[{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}]`)
+	assert.NotContains(t, content, `__internal`)
 }
 
 func TestLabelSelector(t *testing.T) {
