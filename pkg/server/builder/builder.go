@@ -36,14 +36,16 @@ import (
 
 // NewServerBuilder builds an apiserver to server Kubernetes resources and sub resources.
 func NewServerBuilder() *Server {
-	scheme := apiserver.NewScheme()
+	storageScheme := apiserver.NewScheme()
+	apiScheme := apiserver.NewScheme()
 	return &Server{
-		stdout:  os.Stdout,
-		stderr:  os.Stderr,
-		scheme:  scheme,
-		codecs:  serializer.NewCodecFactory(scheme),
-		storage: map[schema.GroupResource]*singletonProvider{},
-		apis:    map[schema.GroupVersionResource]apiserver.StorageProvider{},
+		stdout:        os.Stdout,
+		stderr:        os.Stderr,
+		storageScheme: storageScheme,
+		apiScheme:     apiScheme,
+		codecs:        serializer.NewCodecFactory(apiScheme),
+		storage:       map[schema.GroupResource]*singletonProvider{},
+		apis:          map[schema.GroupVersionResource]apiserver.StorageProvider{},
 		serving: &options.SecureServingOptions{
 			BindAddress: net.ParseIP("127.0.0.1"),
 		},
@@ -52,9 +54,14 @@ func NewServerBuilder() *Server {
 
 // Server builds a new apiserver for a single API group
 type Server struct {
-	stdout               io.Writer
-	stderr               io.Writer
-	scheme               *runtime.Scheme
+	stdout io.Writer
+	stderr io.Writer
+
+	storageScheme        *runtime.Scheme
+	storageSchemeBuilder runtime.SchemeBuilder
+	apiScheme            *runtime.Scheme
+	apiSchemeBuilder     runtime.SchemeBuilder
+
 	codecs               serializer.CodecFactory
 	recommendedConfigFns []start.RecommendedConfigFn
 	apis                 map[schema.GroupVersionResource]apiserver.StorageProvider
@@ -63,41 +70,44 @@ type Server struct {
 	storage              map[schema.GroupResource]*singletonProvider
 	groupVersions        map[schema.GroupVersion]bool
 	orderedGroupVersions []schema.GroupVersion
-	schemeBuilder        runtime.SchemeBuilder
 	serving              *options.SecureServingOptions
 	connProvider         apiserver.ConnProvider
 }
 
 func (a *Server) buildCodec() (runtime.Codec, error) {
-	a.schemeBuilder.Register(
-		func(scheme *runtime.Scheme) error {
-			groupVersions := make(map[string]sets.String)
-			for gvr := range a.apis {
-				if groupVersions[gvr.Group] == nil {
-					groupVersions[gvr.Group] = sets.NewString()
-				}
-				groupVersions[gvr.Group].Insert(gvr.Version)
+	addGroupVersions := func(scheme *runtime.Scheme) error {
+		groupVersions := make(map[string]sets.String)
+		for gvr := range a.apis {
+			if groupVersions[gvr.Group] == nil {
+				groupVersions[gvr.Group] = sets.NewString()
 			}
-			for g, versions := range groupVersions {
-				gvs := []schema.GroupVersion{}
-				for _, v := range versions.List() {
-					gvs = append(gvs, schema.GroupVersion{
-						Group:   g,
-						Version: v,
-					})
-				}
-				err := scheme.SetVersionPriority(gvs...)
-				if err != nil {
-					return err
-				}
+			groupVersions[gvr.Group].Insert(gvr.Version)
+		}
+		for g, versions := range groupVersions {
+			gvs := []schema.GroupVersion{}
+			for _, v := range versions.List() {
+				gvs = append(gvs, schema.GroupVersion{
+					Group:   g,
+					Version: v,
+				})
 			}
-			for i := range a.orderedGroupVersions {
-				metav1.AddToGroupVersion(scheme, a.orderedGroupVersions[i])
+			err := scheme.SetVersionPriority(gvs...)
+			if err != nil {
+				return err
 			}
-			return nil
-		},
-	)
-	if err := a.schemeBuilder.AddToScheme(a.scheme); err != nil {
+		}
+		for i := range a.orderedGroupVersions {
+			metav1.AddToGroupVersion(scheme, a.orderedGroupVersions[i])
+		}
+		return nil
+	}
+
+	a.storageSchemeBuilder.Register(addGroupVersions)
+	if err := a.storageSchemeBuilder.AddToScheme(a.storageScheme); err != nil {
+		panic(err)
+	}
+	a.apiSchemeBuilder.Register(addGroupVersions)
+	if err := a.apiSchemeBuilder.AddToScheme(a.apiScheme); err != nil {
 		panic(err)
 	}
 
@@ -115,7 +125,7 @@ func (a *Server) ToServerOptions() (*start.TiltServerOptions, error) {
 	if err != nil {
 		return nil, err
 	}
-	return start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme,
+	return start.NewTiltServerOptions(a.stdout, a.stderr, a.apiScheme,
 		a.codecs, codec, a.recommendedConfigFns, a.apis, a.serving, a.connProvider), nil
 }
 
@@ -127,7 +137,7 @@ func (a *Server) ToServerCommand() (*Command, error) {
 		return nil, err
 	}
 
-	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.scheme,
+	o := start.NewTiltServerOptions(a.stdout, a.stderr, a.apiScheme,
 		a.codecs, codec, a.recommendedConfigFns, a.apis, a.serving, a.connProvider)
 	cmd := start.NewCommandStartTiltServer(o, genericapiserver.SetupSignalHandler())
 	cmd.Flags().AddGoFlagSet(flag.CommandLine)
