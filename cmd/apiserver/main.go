@@ -18,7 +18,7 @@ package main
 
 import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
-	"k8s.io/klog"
+	"k8s.io/klog/v2"
 
 	// +kubebuilder:scaffold:resource-imports
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
