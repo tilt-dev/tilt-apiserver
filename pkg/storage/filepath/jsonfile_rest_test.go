@@ -111,6 +111,46 @@ func TestFilepathREST_Delete_Finalizers(t *testing.T) {
 	f.mustNotExist("test-obj")
 }
 
+func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
+	f := newRESTFixture(t)
+	defer f.tearDown()
+
+	var obj runtime.Object
+	obj = &v1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-obj",
+		},
+		Spec: v1alpha1.ManifestSpec{
+			Message: "original",
+		},
+	}
+
+	f.mustCreate(obj)
+
+	obj = f.mustUpdate("test-obj", func(obj runtime.Object) {
+		m := obj.(*v1alpha1.Manifest)
+		m.Spec.Message = "updated"
+	})
+
+	require.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	require.Equal(t, "updated", obj.(*v1alpha1.Manifest).Spec.Message)
+
+	obj, err := f.update("test-obj", func(obj runtime.Object) {
+		m := obj.(*v1alpha1.Manifest)
+		m.SetResourceVersion("1")
+		m.Spec.Message = "impossible"
+	})
+
+	require.EqualError(t, err, `Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`)
+	require.Nil(t, obj)
+
+	obj, err = f.get("test-obj")
+	require.NoError(t, err, "Failed to fetch object")
+	// object should not have changed
+	require.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	require.Equal(t, "updated", obj.(*v1alpha1.Manifest).Spec.Message)
+}
+
 type restOptionsGetter struct {
 	codec runtime.Codec
 }
@@ -241,11 +281,16 @@ func (r *restFixture) mustCreate(obj runtime.Object) runtime.Object {
 	return createdObj
 }
 
-func (r *restFixture) mustNotExist(name string) {
-	r.t.Helper()
+func (r *restFixture) get(name string) (runtime.Object, error) {
 	ctx, cancel := r.ctx()
 	defer cancel()
-	_, err := r.getter().Get(ctx, name, nil)
+	obj, err := r.getter().Get(ctx, name, nil)
+	return obj, err
+}
+
+func (r *restFixture) mustNotExist(name string) {
+	r.t.Helper()
+	_, err := r.get(name)
 	apiError, ok := err.(apierrors.APIStatus)
 	require.Truef(r.t, ok && apiError.Status().Code == 404, "Did not receive APIStatus not found error: %v", err)
 }
@@ -266,7 +311,7 @@ func (o objectUpdater) UpdatedObject(ctx context.Context, oldObj runtime.Object)
 	return toUpdate, nil
 }
 
-func (r *restFixture) mustUpdate(name string, updateFn objectUpdateFn) runtime.Object {
+func (r *restFixture) update(name string, updateFn objectUpdateFn) (runtime.Object, error) {
 	r.t.Helper()
 	ctx, cancel := r.ctx()
 	defer cancel()
@@ -274,10 +319,19 @@ func (r *restFixture) mustUpdate(name string, updateFn objectUpdateFn) runtime.O
 	updater := objectUpdater{updateFn: updateFn}
 
 	updatedObj, created, err := r.updater().Update(ctx, name, updater, nil, nil, false, nil)
-	require.NoError(r.t, err)
 	require.False(r.t, created)
-	objMeta, err := meta.Accessor(updatedObj)
-	require.NoError(r.t, err)
-	assert.Equal(r.t, "test-obj", objMeta.GetName())
+
+	if err == nil {
+		objMeta := r.mustMeta(updatedObj)
+		assert.Equal(r.t, name, objMeta.GetName())
+	}
+
+	return updatedObj, err
+}
+
+func (r *restFixture) mustUpdate(name string, updateFn objectUpdateFn) runtime.Object {
+	r.t.Helper()
+	updatedObj, err := r.update(name, updateFn)
+	require.NoErrorf(r.t, err, "Failed to update %s", name)
 	return updatedObj
 }
