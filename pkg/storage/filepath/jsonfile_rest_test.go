@@ -142,7 +142,7 @@ func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 	})
 
 	require.EqualError(t, err,
-		`Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`)
+		`Operation cannot be fulfilled on manifests.core.tilt.dev "test-obj": the object has been modified; please apply your changes to the latest version and try again`)
 	require.Nil(t, obj)
 
 	obj, err = f.get("test-obj")
@@ -190,7 +190,7 @@ func TestFilepathREST_Update_OptimisticConcurrency_Subresource(t *testing.T) {
 	})
 
 	if assert.EqualError(t, err,
-		`Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`) {
+		`Operation cannot be fulfilled on manifests.core.tilt.dev "test-obj": the object has been modified; please apply your changes to the latest version and try again`) {
 		assert.Nil(t, obj)
 	}
 

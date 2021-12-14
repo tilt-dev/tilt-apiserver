@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -21,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
+	"k8s.io/apiserver/pkg/registry/generic/registry"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage"
 )
@@ -79,7 +81,7 @@ type filepathREST struct {
 	groupResource  schema.GroupResource
 	fs             FS
 	watchSet       *WatchSet
-	currentVersion int64
+	currentVersion uint64
 }
 
 func (f *filepathREST) notifyWatchers(ev watch.Event) {
@@ -173,13 +175,17 @@ func (f *filepathREST) Create(
 		return nil, err
 	}
 	filename := f.objectFileName(ctx, accessor.GetName())
-	accessor.SetResourceVersion(fmt.Sprintf("%d", atomic.AddInt64(&f.currentVersion, 1)))
+	version := atomic.AddUint64(&f.currentVersion, 1)
+	accessor.SetResourceVersion(fmt.Sprintf("%d", version))
 
 	if f.fs.Exists(filename) {
 		return nil, apierrors.NewAlreadyExists(f.groupResource, accessor.GetName())
 	}
 
-	if err := f.fs.Write(f.codec, filename, obj); err != nil {
+	if err := f.fs.Write(f.codec, filename, obj, version); err != nil {
+		if errors.Is(err, VersionError) {
+			err = f.conflictErr(accessor.GetName())
+		}
 		return nil, err
 	}
 
@@ -200,12 +206,6 @@ func (f *filepathREST) Update(
 	forceAllowCreate bool,
 	options *metav1.UpdateOptions,
 ) (runtime.Object, bool, error) {
-	// TODO(milas): when we read the old object, we should take a lock on it so that no other
-	// 	write actions can occur until our "transaction" is done; currently, there's still the
-	// 	possibility for two concurrent updates to read in the same old object, resulting in a
-	// 	race; similarly, it's possible for a delete to happen mid-update, with both operations
-	// 	succeeding, resulting in a deleted object being re-created by the update
-	// 	(alternatively, the FS layer could track versions and provide these guarantees)
 	isCreate := false
 	oldObj, err := f.Get(ctx, name, nil)
 	if err != nil {
@@ -244,12 +244,7 @@ func (f *filepathREST) Update(
 		return nil, false, err
 	}
 	if oldVersion != updatedVersion {
-		kinds, _, _ := f.strategy.ObjectKinds(updatedObj)
-		conflictErr := apierrors.NewConflict(
-			schema.GroupResource{Group: kinds[0].Group, Resource: kinds[0].Kind},
-			name,
-			errors.New("object was modified"))
-		return nil, false, conflictErr
+		return nil, false, f.conflictErr(name)
 	}
 
 	if err := rest.BeforeUpdate(f.strategy, ctx, updatedObj, oldObj); err != nil {
@@ -264,7 +259,10 @@ func (f *filepathREST) Update(
 				return nil, false, err
 			}
 		}
-		if err := f.fs.Write(f.codec, filename, updatedObj); err != nil {
+		if err := f.fs.Write(f.codec, filename, updatedObj, oldVersion); err != nil {
+			if errors.Is(err, VersionError) {
+				err = f.conflictErr(name)
+			}
 			return nil, false, err
 		}
 		f.notifyWatchers(watch.Event{
@@ -285,7 +283,7 @@ func (f *filepathREST) Update(
 		return nil, false, err
 	}
 
-	updatedMeta.SetResourceVersion(fmt.Sprintf("%d", atomic.AddInt64(&f.currentVersion, 1)))
+	updatedMeta.SetResourceVersion(fmt.Sprintf("%d", atomic.AddUint64(&f.currentVersion, 1)))
 
 	// handle 2-phase deletes -> for entities with finalizers, DeletionTimestamp is set and reconcilers execute +
 	// remove them (triggering more updates); once drained, it can be deleted from the final update operation
@@ -301,7 +299,10 @@ func (f *filepathREST) Update(
 		return updatedObj, false, nil
 	}
 
-	if err := f.fs.Write(f.codec, filename, updatedObj); err != nil {
+	if err := f.fs.Write(f.codec, filename, updatedObj, oldVersion); err != nil {
+		if errors.Is(err, VersionError) {
+			err = f.conflictErr(name)
+		}
 		return nil, false, err
 	}
 	f.notifyWatchers(watch.Event{
@@ -333,7 +334,6 @@ func (f *filepathREST) Delete(
 	}
 	// loosely adapted from https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L854-L877
 	if len(objMeta.GetFinalizers()) != 0 {
-
 		now := metav1.NewTime(time.Now())
 		// per-contract, deletion timestamps can not be unset and can only be moved _earlier_
 		if objMeta.GetDeletionTimestamp() == nil || now.Before(objMeta.GetDeletionTimestamp()) {
@@ -342,7 +342,15 @@ func (f *filepathREST) Delete(
 		zero := int64(0)
 		objMeta.SetDeletionGracePeriodSeconds(&zero)
 
-		if err := f.fs.Write(f.codec, filename, oldObj); err != nil {
+		version, err := resourceVersion(oldObj)
+		if err != nil {
+			return nil, false, err
+		}
+
+		if err := f.fs.Write(f.codec, filename, oldObj, version); err != nil {
+			if errors.Is(err, VersionError) {
+				err = f.conflictErr(name)
+			}
 			return nil, false, err
 		}
 
@@ -464,6 +472,13 @@ func (f *filepathREST) Watch(ctx context.Context, options *metainternalversion.L
 	return jw, nil
 }
 
+func (f *filepathREST) conflictErr(name string) error {
+	return apierrors.NewConflict(
+		f.groupResource,
+		name,
+		errors.New(registry.OptimisticLockErrorMsg))
+}
+
 func newSelectionPredicate(options *metainternalversion.ListOptions) storage.SelectionPredicate {
 	p := storage.SelectionPredicate{
 		Label:    labels.Everything(),
@@ -481,10 +496,14 @@ func newSelectionPredicate(options *metainternalversion.ListOptions) storage.Sel
 	return p
 }
 
-func resourceVersion(obj runtime.Object) (string, error) {
+func resourceVersion(obj runtime.Object) (uint64, error) {
 	objMeta, err := meta.Accessor(obj)
 	if err != nil {
-		return "", err
+		return 0, err
 	}
-	return objMeta.GetResourceVersion(), nil
+	version, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 0)
+	if err != nil {
+		return 0, err
+	}
+	return version, nil
 }

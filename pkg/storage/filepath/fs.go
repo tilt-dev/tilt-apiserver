@@ -2,6 +2,7 @@ package filepath
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -12,13 +13,15 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
+var VersionError = errors.New("incorrect object version")
+
 // A filesystem interface so we can sub out filesystem-based storage
 // with memory-based storage.
 type FS interface {
 	Remove(filepath string) error
 	Exists(filepath string) bool
 	EnsureDir(dirname string) error
-	Write(encoder runtime.Encoder, filepath string, obj runtime.Object) error
+	Write(encoder runtime.Encoder, filepath string, obj runtime.Object, storageVersion uint64) error
 	Read(decoder runtime.Decoder, path string, newFunc func() runtime.Object) (runtime.Object, error)
 	VisitDir(dirname string, newFunc func() runtime.Object, codec runtime.Decoder, visitFunc func(string, runtime.Object) error) error
 }
@@ -44,7 +47,10 @@ func (fs RealFS) EnsureDir(dirname string) error {
 	return nil
 }
 
-func (fs RealFS) Write(encoder runtime.Encoder, filepath string, obj runtime.Object) error {
+func (fs RealFS) Write(encoder runtime.Encoder, filepath string, obj runtime.Object, storageVersion uint64) error {
+	// TODO(milas): use resourceVersion - currently, we only care about in-process synchronization (things would
+	// 	go awry if multiple apiservers were writing to the same files), so we can use an identical strategy to
+	// 	MemoryFS at the expense of limiting writes to 1x concurrent or do something more clever
 	buf := new(bytes.Buffer)
 	if err := encoder.Encode(obj, buf); err != nil {
 		return err
@@ -87,13 +93,15 @@ func (fs RealFS) VisitDir(dirname string, newFunc func() runtime.Object, codec r
 // An in-memory structure that pretends to be a filesystem,
 // and supports all the storage interfaces that RealFS needs.
 type MemoryFS struct {
-	mu  sync.Mutex
-	dir map[string]interface{}
+	mu       sync.Mutex
+	dir      map[string]interface{}
+	versions map[string]uint64
 }
 
 func NewMemoryFS() *MemoryFS {
 	return &MemoryFS{
-		dir: make(map[string]interface{}),
+		dir:      make(map[string]interface{}),
+		versions: make(map[string]uint64),
 	}
 }
 
@@ -140,6 +148,7 @@ func (fs *MemoryFS) Remove(p string) error {
 	}
 
 	delete(dir, filepath.Base(p))
+	delete(fs.versions, filepath.Clean(p))
 	return nil
 }
 
@@ -166,7 +175,7 @@ func (fs *MemoryFS) EnsureDir(dirname string) error {
 }
 
 // Write a copy of the object to our in-memory filesystem.
-func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object) error {
+func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object, storageVersion uint64) error {
 	// Encoding the object as bytes ensures that our in-memory filesystem
 	// has the same immutability semantics as a real storage system.
 	buf := new(bytes.Buffer)
@@ -177,12 +186,23 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object)
 	fs.mu.Lock()
 	defer fs.mu.Unlock()
 
+	versionKey := filepath.Clean(p)
+	if version, ok := fs.versions[versionKey]; ok && version != storageVersion {
+		return VersionError
+	}
+
 	dir, err := fs.ensureDir(filepath.Dir(p))
 	if err != nil {
 		return err
 	}
 
+	newVersion, err := resourceVersion(obj)
+	if err != nil {
+		return err
+	}
+
 	dir[filepath.Base(p)] = buf
+	fs.versions[versionKey] = newVersion
 	return nil
 }
 
