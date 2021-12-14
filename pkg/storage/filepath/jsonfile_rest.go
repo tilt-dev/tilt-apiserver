@@ -200,6 +200,12 @@ func (f *filepathREST) Update(
 	forceAllowCreate bool,
 	options *metav1.UpdateOptions,
 ) (runtime.Object, bool, error) {
+	// TODO(milas): when we read the old object, we should take a lock on it so that no other
+	// 	write actions can occur until our "transaction" is done; currently, there's still the
+	// 	possibility for two concurrent updates to read in the same old object, resulting in a
+	// 	race; similarly, it's possible for a delete to happen mid-update, with both operations
+	// 	succeeding, resulting in a deleted object being re-created by the update
+	// 	(alternatively, the FS layer could track versions and provide these guarantees)
 	isCreate := false
 	oldObj, err := f.Get(ctx, name, nil)
 	if err != nil {
@@ -207,6 +213,10 @@ func (f *filepathREST) Update(
 			return nil, false, err
 		}
 		isCreate = true
+	}
+	oldVersion, err := resourceVersion(oldObj)
+	if err != nil {
+		return nil, false, err
 	}
 
 	// TODO: should not be necessary, verify Get works before creating filepath
@@ -224,6 +234,22 @@ func (f *filepathREST) Update(
 	updatedObj, err := objInfo.UpdatedObject(ctx, oldObj)
 	if err != nil {
 		return nil, false, err
+	}
+
+	// this check MUST happen before rest.BeforeUpdate is called - for subresource updates, it'll
+	// use the oldObj (storage version) to copy the subresource to (to avoid changing the spec),
+	// so the version from the request object will be lost, breaking optimistic concurrency
+	updatedVersion, err := resourceVersion(updatedObj)
+	if err != nil {
+		return nil, false, err
+	}
+	if oldVersion != updatedVersion {
+		kinds, _, _ := f.strategy.ObjectKinds(updatedObj)
+		conflictErr := apierrors.NewConflict(
+			schema.GroupResource{Group: kinds[0].Group, Resource: kinds[0].Kind},
+			name,
+			errors.New("object was modified"))
+		return nil, false, conflictErr
 	}
 
 	if err := rest.BeforeUpdate(f.strategy, ctx, updatedObj, oldObj); err != nil {
@@ -254,28 +280,9 @@ func (f *filepathREST) Update(
 		}
 	}
 
-	oldMeta, err := meta.Accessor(oldObj)
-	if err != nil {
-		return nil, false, err
-	}
 	updatedMeta, err := meta.Accessor(updatedObj)
 	if err != nil {
 		return nil, false, err
-	}
-
-	// TODO(milas): when we read the old object, we should take a lock on it so that no other
-	// 	write actions can occur until our "transaction" is done; currently, there's still the
-	// 	possibility for two concurrent updates to read in the same old object, resulting in a
-	// 	race; similarly, it's possible for a delete to happen mid-update, with both operations
-	// 	succeeding, resulting in a deleted object being re-created by the update
-	// 	(alternatively, the FS layer could track versions and provide these guarantees)
-	if oldMeta.GetResourceVersion() != updatedMeta.GetResourceVersion() {
-		kinds, _, _ := f.strategy.ObjectKinds(updatedObj)
-		conflictErr := apierrors.NewConflict(
-			schema.GroupResource{Group: kinds[0].Group, Resource: kinds[0].Kind},
-			name,
-			errors.New("object was modified"))
-		return nil, false, conflictErr
 	}
 
 	updatedMeta.SetResourceVersion(fmt.Sprintf("%d", atomic.AddInt64(&f.currentVersion, 1)))
@@ -472,4 +479,12 @@ func newSelectionPredicate(options *metainternalversion.ListOptions) storage.Sel
 		}
 	}
 	return p
+}
+
+func resourceVersion(obj runtime.Object) (string, error) {
+	objMeta, err := meta.Accessor(obj)
+	if err != nil {
+		return "", err
+	}
+	return objMeta.GetResourceVersion(), nil
 }
