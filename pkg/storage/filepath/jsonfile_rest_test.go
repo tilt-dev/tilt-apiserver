@@ -141,7 +141,8 @@ func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 		m.Spec.Message = "impossible"
 	})
 
-	require.EqualError(t, err, `Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`)
+	require.EqualError(t, err,
+		`Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`)
 	require.Nil(t, obj)
 
 	obj, err = f.get("test-obj")
@@ -149,6 +150,55 @@ func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 	// object should not have changed
 	require.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
 	require.Equal(t, "updated", obj.(*v1alpha1.Manifest).Spec.Message)
+}
+
+func TestFilepathREST_Update_OptimisticConcurrency_Subresource(t *testing.T) {
+	f := newRESTFixtureWithStrategy(t, func(defaultStrategy builderrest.Strategy) builderrest.Strategy {
+		return builderrest.StatusSubResourceStrategy{Strategy: defaultStrategy}
+	})
+	defer f.tearDown()
+
+	var obj runtime.Object
+	obj = &v1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-obj",
+		},
+		Spec: v1alpha1.ManifestSpec{
+			Message: "spec_message",
+		},
+		Status: v1alpha1.ManifestStatus{
+			Message: "status_message",
+		},
+	}
+
+	f.mustCreate(obj)
+
+	obj = f.mustUpdate("test-obj", func(obj runtime.Object) {
+		m := obj.(*v1alpha1.Manifest)
+		m.Spec.Message = "this_should_be_ignored"
+		m.Status.Message = "updated_status_message"
+	})
+
+	assert.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	assert.Equal(t, "spec_message", obj.(*v1alpha1.Manifest).Spec.Message)
+	require.Equal(t, "updated_status_message", obj.(*v1alpha1.Manifest).Status.Message)
+
+	obj, err := f.update("test-obj", func(obj runtime.Object) {
+		m := obj.(*v1alpha1.Manifest)
+		m.SetResourceVersion("1")
+		m.Status.Message = "impossible"
+	})
+
+	if assert.EqualError(t, err,
+		`Operation cannot be fulfilled on Manifest.core.tilt.dev "test-obj": object was modified`) {
+		assert.Nil(t, obj)
+	}
+
+	obj, err = f.get("test-obj")
+	require.NoError(t, err, "Failed to fetch object")
+	// object should not have changed
+	assert.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	assert.Equal(t, "updated_status_message", obj.(*v1alpha1.Manifest).Status.Message)
 }
 
 type restOptionsGetter struct {
@@ -172,6 +222,14 @@ type restFixture struct {
 
 func newRESTFixture(t *testing.T) *restFixture {
 	t.Helper()
+	return newRESTFixtureWithStrategy(t, func(defaultStrategy builderrest.Strategy) builderrest.Strategy {
+		return defaultStrategy
+	})
+}
+
+func newRESTFixtureWithStrategy(t *testing.T,
+	strategyFn func(defaultStrategy builderrest.Strategy) builderrest.Strategy) *restFixture {
+	t.Helper()
 
 	fs := filepath.NewMemoryFS()
 	ws := filepath.NewWatchSet()
@@ -184,13 +242,14 @@ func newRESTFixture(t *testing.T) *restFixture {
 	require.NoError(t, err)
 
 	obj := v1alpha1.Manifest{}
+	defaultStrategy := builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &obj}
 
 	sp := filepath.NewJSONFilepathStorageProvider(
 		&obj,
 		dir,
 		fs,
 		ws,
-		builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &obj})
+		strategyFn(defaultStrategy))
 
 	codec := serializer.NewCodecFactory(scheme).LegacyCodec(v1alpha1.SchemeGroupVersion)
 	opts := &restOptionsGetter{codec: codec}
