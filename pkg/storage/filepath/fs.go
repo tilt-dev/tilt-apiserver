@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -229,7 +228,7 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object,
 
 	// increment the resource version - it's applied to the object pointer for
 	// the caller in addition to being used to ensure the write is valid
-	newVersion := atomic.AddUint64(&fs.rev, 1)
+	newVersion := fs.incrementRev()
 	if err := setResourceVersion(obj, newVersion); err != nil {
 		return err
 	}
@@ -351,4 +350,12 @@ func (fs *MemoryFS) readDir(dirname string) ([]string, []versionedData, error) {
 
 	err = walk(dirname, dir)
 	return keyPaths, buffers, err
+}
+
+// incrementRev increases the revision counter and returns the new value.
+//
+// mu must be held.
+func (fs *MemoryFS) incrementRev() uint64 {
+	fs.rev++
+	return fs.rev
 }
