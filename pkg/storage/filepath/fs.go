@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"k8s.io/apimachinery/pkg/runtime"
 )
@@ -99,6 +100,7 @@ func (fs RealFS) VisitDir(dirname string, newFunc func() runtime.Object, codec r
 type MemoryFS struct {
 	mu  sync.Mutex
 	dir map[string]interface{}
+	rev uint64
 }
 
 func NewMemoryFS() *MemoryFS {
@@ -227,7 +229,7 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object,
 
 	// increment the resource version - it's applied to the object pointer for
 	// the caller in addition to being used to ensure the write is valid
-	newVersion := storageVersion + 1
+	newVersion := atomic.AddUint64(&fs.rev, 1)
 	if err := setResourceVersion(obj, newVersion); err != nil {
 		return err
 	}
