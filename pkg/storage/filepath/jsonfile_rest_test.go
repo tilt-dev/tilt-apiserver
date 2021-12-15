@@ -2,8 +2,10 @@ package filepath_test
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -199,6 +201,90 @@ func TestFilepathREST_Update_OptimisticConcurrency_Subresource(t *testing.T) {
 	// object should not have changed
 	assert.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
 	assert.Equal(t, "updated_status_message", obj.(*v1alpha1.Manifest).Status.Message)
+}
+
+func TestFilepathREST_Update_SimultaneousUpdates(t *testing.T) {
+	f := newRESTFixture(t)
+	defer f.tearDown()
+
+	var obj runtime.Object
+	obj = &v1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-obj",
+		},
+		Spec: v1alpha1.ManifestSpec{
+			Message: "original",
+		},
+	}
+
+	f.mustCreate(obj)
+
+	type result struct {
+		inVersion  string
+		outVersion string
+		message    string
+	}
+
+	// create a bunch of workers that loop attempting to do updates and keep
+	// track of which are successful so that we can ensure that only one update
+	// per input resourceVersion is ever accepted by the server
+	const workerCount = 20
+	const workerIterations = 100
+	var results [workerCount][workerIterations]result
+	var wg sync.WaitGroup
+	for worker := 0; worker < workerCount; worker++ {
+		wg.Add(1)
+		go func(worker int) {
+			for i := 0; i < workerIterations; i++ {
+				var inVersion string
+				msg := fmt.Sprintf("worker-%d-iteration-%d", worker, i)
+				obj, err := f.update("test-obj", func(obj runtime.Object) {
+					m := obj.(*v1alpha1.Manifest)
+					m.Spec.Message = msg
+					inVersion = m.GetResourceVersion()
+				})
+				if err == nil {
+					m := obj.(*v1alpha1.Manifest)
+					// verify the version returned back to us has our data
+					require.Equal(t, msg, m.Spec.Message, "Incorrect updated object message")
+					results[worker][i] = result{
+						inVersion:  inVersion,
+						outVersion: m.GetResourceVersion(),
+						message:    m.Spec.Message,
+					}
+				}
+			}
+			wg.Done()
+		}(worker)
+	}
+
+	wg.Wait()
+
+	seen := make(map[string]string)
+	for worker := range results {
+		for i := range results[worker] {
+			r := results[worker][i]
+			if r.inVersion == "" {
+				continue
+			}
+			if v, ok := seen[r.inVersion]; ok {
+				// apiserver accepted > 1 update for the same inVersion
+				// NOTE: if this is failing and you see 2x identical outVersions, that's not a test issue! it means
+				// 	not only was the update accepted twice, but there are now two _different_ objects out there with
+				// 	the same resource version
+				t.Fatalf("Saw more than one update for inVersion=%s (outVersion=%s and outVersion=%s)",
+					r.inVersion, v, r.outVersion)
+			}
+
+			// it IS possible for a no-op update to result in no version change, but all the updates in this test
+			// mutate the object, so if the version doesn't change but apiserver accepts the update, that's a bug
+			require.NotEqualf(t, r.inVersion, r.outVersion,
+				"inVersion and outVersion are equal (apiserver changed object without changing version)")
+
+			seen[r.inVersion] = r.outVersion
+			require.Equal(t, fmt.Sprintf("worker-%d-iteration-%d", worker, i), r.message)
+		}
+	}
 }
 
 type restOptionsGetter struct {

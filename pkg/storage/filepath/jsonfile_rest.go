@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
-	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -77,11 +75,10 @@ type filepathREST struct {
 	newFunc     func() runtime.Object
 	newListFunc func() runtime.Object
 
-	strategy       Strategy
-	groupResource  schema.GroupResource
-	fs             FS
-	watchSet       *WatchSet
-	currentVersion uint64
+	strategy      Strategy
+	groupResource schema.GroupResource
+	fs            FS
+	watchSet      *WatchSet
 }
 
 func (f *filepathREST) notifyWatchers(ev watch.Event) {
@@ -175,14 +172,12 @@ func (f *filepathREST) Create(
 		return nil, err
 	}
 	filename := f.objectFileName(ctx, accessor.GetName())
-	version := atomic.AddUint64(&f.currentVersion, 1)
-	accessor.SetResourceVersion(fmt.Sprintf("%d", version))
 
 	if f.fs.Exists(filename) {
 		return nil, apierrors.NewAlreadyExists(f.groupResource, accessor.GetName())
 	}
 
-	if err := f.fs.Write(f.codec, filename, obj, version); err != nil {
+	if err := f.fs.Write(f.codec, filename, obj, 0); err != nil {
 		if errors.Is(err, VersionError) {
 			err = f.conflictErr(accessor.GetName())
 		}
@@ -206,110 +201,129 @@ func (f *filepathREST) Update(
 	forceAllowCreate bool,
 	options *metav1.UpdateOptions,
 ) (runtime.Object, bool, error) {
-	isCreate := false
-	oldObj, err := f.Get(ctx, name, nil)
-	if err != nil {
-		if !forceAllowCreate {
-			return nil, false, err
+	var isCreate bool
+	var isDelete bool
+	// attempt to update the object, automatically retrying on storage-level conflicts
+	// (see guaranteedUpdate docs for details)
+	obj, err := f.guaranteedUpdate(ctx, name, func(input runtime.Object) (output runtime.Object, err error) {
+		isCreate = false
+		isDelete = false
+
+		if input == nil {
+			if !forceAllowCreate {
+				return nil, apierrors.NewNotFound(f.groupResource, name)
+			}
+			isCreate = true
 		}
-		isCreate = true
-	}
-	oldVersion, err := resourceVersion(oldObj)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// TODO: should not be necessary, verify Get works before creating filepath
-	if f.NamespaceScoped() {
-		// ensures namespace dir
-		ns, ok := genericapirequest.NamespaceFrom(ctx)
-		if !ok {
-			return nil, false, ErrNamespaceNotExists
+		inputVersion, err := getResourceVersion(input)
+		if err != nil {
+			return nil, err
 		}
-		if err := f.fs.EnsureDir(filepath.Join(f.objRootPath, ns)); err != nil {
-			return nil, false, err
+
+		// TODO: should not be necessary, verify Get works before creating filepath
+		if f.NamespaceScoped() {
+			// ensures namespace dir
+			ns, ok := genericapirequest.NamespaceFrom(ctx)
+			if !ok {
+				return nil, ErrNamespaceNotExists
+			}
+			if err := f.fs.EnsureDir(filepath.Join(f.objRootPath, ns)); err != nil {
+				return nil, err
+			}
 		}
-	}
 
-	updatedObj, err := objInfo.UpdatedObject(ctx, oldObj)
+		output, err = objInfo.UpdatedObject(ctx, input)
+		if err != nil {
+			return nil, err
+		}
+
+		// this check MUST happen before rest.BeforeUpdate is called - for subresource updates, it'll
+		// use the input (storage version) to copy the subresource to (to avoid changing the spec),
+		// so the version from the request object will be lost, breaking optimistic concurrency
+		updatedVersion, err := getResourceVersion(output)
+		if err != nil {
+			return nil, err
+		}
+		if inputVersion != updatedVersion {
+			return nil, f.conflictErr(name)
+		}
+
+		if err := rest.BeforeUpdate(f.strategy, ctx, output, input); err != nil {
+			return nil, err
+		}
+
+		if isCreate {
+			if createValidation != nil {
+				if err := createValidation(ctx, input); err != nil {
+					return nil, err
+				}
+			}
+			return output, nil
+		}
+
+		if updateValidation != nil {
+			if err := updateValidation(ctx, output, input); err != nil {
+				return nil, err
+			}
+		}
+
+		outputMeta, err := meta.Accessor(output)
+		if err != nil {
+			return nil, err
+		}
+
+		// handle 2-phase deletes -> for entities with finalizers, DeletionTimestamp is set and reconcilers execute +
+		// remove them (triggering more updates); once drained, it can be deleted from the final update operation
+		// loosely based off https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L624
+		if len(outputMeta.GetFinalizers()) == 0 && !outputMeta.GetDeletionTimestamp().IsZero() {
+			// to simplify semantics here, we allow this update to go through and then
+			// delete it - if this becomes a bottleneck (seems unlikely), we can delete
+			// here and return a special sentinel error
+			isDelete = true
+			return output, nil
+		}
+
+		return output, nil
+	})
 	if err != nil {
+		// TODO(milas): we need a better way of handling standard errors and
+		// 	wrapping any others in generic apierrors - returning plain Go errors
+		// 	(which still happens in some code paths) makes apiserver log out
+		// 	warnings, though it doesn't actually break things so is not critical
+		if os.IsNotExist(err) {
+			return nil, false, apierrors.NewNotFound(f.groupResource, name)
+		}
 		return nil, false, err
 	}
-
-	// this check MUST happen before rest.BeforeUpdate is called - for subresource updates, it'll
-	// use the oldObj (storage version) to copy the subresource to (to avoid changing the spec),
-	// so the version from the request object will be lost, breaking optimistic concurrency
-	updatedVersion, err := resourceVersion(updatedObj)
-	if err != nil {
-		return nil, false, err
-	}
-	if oldVersion != updatedVersion {
-		return nil, false, f.conflictErr(name)
-	}
-
-	if err := rest.BeforeUpdate(f.strategy, ctx, updatedObj, oldObj); err != nil {
-		return nil, false, err
-	}
-
-	filename := f.objectFileName(ctx, name)
 
 	if isCreate {
-		if createValidation != nil {
-			if err := createValidation(ctx, updatedObj); err != nil {
-				return nil, false, err
-			}
-		}
-		if err := f.fs.Write(f.codec, filename, updatedObj, oldVersion); err != nil {
-			if errors.Is(err, VersionError) {
-				err = f.conflictErr(name)
-			}
-			return nil, false, err
-		}
 		f.notifyWatchers(watch.Event{
 			Type:   watch.Added,
-			Object: updatedObj,
+			Object: obj,
 		})
-		return updatedObj, true, nil
+		return obj, true, nil
 	}
 
-	if updateValidation != nil {
-		if err := updateValidation(ctx, updatedObj, oldObj); err != nil {
-			return nil, false, err
-		}
-	}
-
-	updatedMeta, err := meta.Accessor(updatedObj)
-	if err != nil {
-		return nil, false, err
-	}
-
-	updatedMeta.SetResourceVersion(fmt.Sprintf("%d", atomic.AddUint64(&f.currentVersion, 1)))
-
-	// handle 2-phase deletes -> for entities with finalizers, DeletionTimestamp is set and reconcilers execute +
-	// remove them (triggering more updates); once drained, it can be deleted from the final update operation
-	// loosely based off https://github.com/kubernetes/apiserver/blob/947ebe755ed8aed2e0f0f5d6420caad07fc04cc2/pkg/registry/generic/registry/store.go#L624
-	if len(updatedMeta.GetFinalizers()) == 0 && !updatedMeta.GetDeletionTimestamp().IsZero() {
+	if isDelete {
+		filename := f.objectFileName(ctx, name)
 		if err := f.fs.Remove(filename); err != nil {
+			if os.IsNotExist(err) {
+				return nil, false, apierrors.NewNotFound(f.groupResource, name)
+			}
 			return nil, false, err
 		}
 		f.notifyWatchers(watch.Event{
 			Type:   watch.Deleted,
-			Object: updatedObj,
+			Object: obj,
 		})
-		return updatedObj, false, nil
+		return obj, false, nil
 	}
 
-	if err := f.fs.Write(f.codec, filename, updatedObj, oldVersion); err != nil {
-		if errors.Is(err, VersionError) {
-			err = f.conflictErr(name)
-		}
-		return nil, false, err
-	}
 	f.notifyWatchers(watch.Event{
 		Type:   watch.Modified,
-		Object: updatedObj,
+		Object: obj,
 	})
-	return updatedObj, false, nil
+	return obj, false, nil
 }
 
 func (f *filepathREST) Delete(
@@ -342,7 +356,7 @@ func (f *filepathREST) Delete(
 		zero := int64(0)
 		objMeta.SetDeletionGracePeriodSeconds(&zero)
 
-		version, err := resourceVersion(oldObj)
+		version, err := getResourceVersion(oldObj)
 		if err != nil {
 			return nil, false, err
 		}
@@ -423,6 +437,73 @@ func (f *filepathREST) objectDirName(ctx context.Context) string {
 	return filepath.Join(f.objRootPath)
 }
 
+// updateFunc should return the updated object to persist to storage.
+//
+// This function might be called more than once, so must be idempotent. If an
+// error is returned from it, the error will be propagated and the update halted.
+type updateFunc func(input runtime.Object) (output runtime.Object, err error)
+
+// guaranteedUpdate keeps calling tryUpdate to update an object retrying the update
+// until success if there is a storage-level conflict.
+//
+// The input object passed to tryUpdate may change across invocations of tryUpdate
+// if other writers are simultaneously updating it, so tryUpdate needs to take into
+// account the current contents of the object when deciding how the update object
+// should look.
+//
+// The "guaranteed" in the name comes from a method of the same name in the
+// Kubernetes apiserver/etcd code. Most of this method comment is copied from
+// its godoc.
+//
+// See https://github.com/kubernetes/apiserver/blob/544b6014f353b0f5e7c6fd2d3e04a7810d0ba5fc/pkg/storage/interfaces.go#L205-L238
+func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpdate updateFunc) (runtime.Object, error) {
+	// technically, this loop should be safe to run indefinitely, but a cap is
+	// applied to avoid bugs resulting in an infinite* loop
+	//
+	// if the cap is hit, an internal server error will be returned
+	//
+	// * really until the context is canceled, but busy looping here for ~30 secs
+	//   until it times out is not great either
+	const maxAttempts = 100
+	for i := 0; i < maxAttempts; i++ {
+		if err := ctx.Err(); err != nil {
+			// the FS layer doesn't use context, so we explicitly check it on
+			// each loop iteration so that we'll stop retrying if the context
+			// gets canceled (e.g. request timeout)
+			return nil, err
+		}
+
+		storageObj, err := f.Get(ctx, name, nil)
+		if err != nil && !apierrors.IsNotFound(err) {
+			// some objects allow create-on-update semantics, so NotFound is not terminal
+			return nil, err
+		}
+		storageVersion, err := getResourceVersion(storageObj)
+		if err != nil {
+			return nil, err
+		}
+
+		out, err := tryUpdate(storageObj)
+		if err != nil {
+			// TODO(milas): check error type and wrap if necessary
+			return nil, err
+		}
+
+		filename := f.objectFileName(ctx, name)
+		if err := f.fs.Write(f.codec, filename, out, storageVersion); err != nil {
+			if errors.Is(err, VersionError) {
+				// storage conflict, retry
+				continue
+			}
+			return nil, err
+		}
+		return out, nil
+	}
+
+	// a non-early return means the loop exhausted all attempts
+	return nil, apierrors.NewInternalError(errors.New("failed to persist to storage"))
+}
+
 func appendItem(v reflect.Value, obj runtime.Object) {
 	v.Set(reflect.Append(v, reflect.ValueOf(obj).Elem()))
 }
@@ -494,16 +575,4 @@ func newSelectionPredicate(options *metainternalversion.ListOptions) storage.Sel
 		}
 	}
 	return p
-}
-
-func resourceVersion(obj runtime.Object) (uint64, error) {
-	objMeta, err := meta.Accessor(obj)
-	if err != nil {
-		return 0, err
-	}
-	version, err := strconv.ParseUint(objMeta.GetResourceVersion(), 10, 0)
-	if err != nil {
-		return 0, err
-	}
-	return version, nil
 }
