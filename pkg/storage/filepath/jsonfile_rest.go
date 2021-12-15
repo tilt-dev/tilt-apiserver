@@ -457,7 +457,15 @@ type updateFunc func(input runtime.Object) (output runtime.Object, err error)
 //
 // See https://github.com/kubernetes/apiserver/blob/544b6014f353b0f5e7c6fd2d3e04a7810d0ba5fc/pkg/storage/interfaces.go#L205-L238
 func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpdate updateFunc) (runtime.Object, error) {
-	for {
+	// technically, this loop should be safe to run indefinitely, but a cap is
+	// applied to avoid bugs resulting in an infinite* loop
+	//
+	// if the cap is hit, an internal server error will be returned
+	//
+	// * really until the context is canceled, but busy looping here for ~30 secs
+	//   until it times out is not great either
+	const maxAttempts = 100
+	for i := 0; i < maxAttempts; i++ {
 		if err := ctx.Err(); err != nil {
 			// the FS layer doesn't use context, so we explicitly check it on
 			// each loop iteration so that we'll stop retrying if the context
@@ -491,6 +499,9 @@ func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpd
 		}
 		return out, nil
 	}
+
+	// a non-early return means the loop exhausted all attempts
+	return nil, apierrors.NewInternalError(errors.New("failed to persist to storage"))
 }
 
 func appendItem(v reflect.Value, obj runtime.Object) {
