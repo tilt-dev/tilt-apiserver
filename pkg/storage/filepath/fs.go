@@ -235,7 +235,7 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object,
 
 	dir[filepath.Base(p)] = versionedData{
 		version: newVersion,
-		data:    append(make([]byte, 0, len(buf.Bytes())), buf.Bytes()...),
+		data:    buf.Bytes(),
 	}
 
 	return nil
