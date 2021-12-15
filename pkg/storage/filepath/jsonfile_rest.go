@@ -203,8 +203,12 @@ func (f *filepathREST) Update(
 ) (runtime.Object, bool, error) {
 	var isCreate bool
 	var isDelete bool
+	// attempt to update the object, automatically retrying on storage-level conflicts
+	// (see guaranteedUpdate docs for details)
 	obj, err := f.guaranteedUpdate(ctx, name, func(input runtime.Object) (output runtime.Object, err error) {
 		isCreate = false
+		isDelete = false
+
 		if input == nil {
 			if !forceAllowCreate {
 				return nil, apierrors.NewNotFound(f.groupResource, name)
@@ -433,8 +437,25 @@ func (f *filepathREST) objectDirName(ctx context.Context) string {
 	return filepath.Join(f.objRootPath)
 }
 
+// updateFunc should return the updated object to persist to storage.
+//
+// This function might be called more than once, so must be idempotent. If an
+// error is returned from it, the error will be propagated and the update halted.
 type updateFunc func(input runtime.Object) (output runtime.Object, err error)
 
+// guaranteedUpdate keeps calling tryUpdate to update an object retrying the update
+// until success if there is a storage-level conflict.
+//
+// The input object passed to tryUpdate may change across invocations of tryUpdate
+// if other writers are simultaneously updating it, so tryUpdate needs to take into
+// account the current contents of the object when deciding how the update object
+// should look.
+//
+// The "guaranteed" in the name comes from a method of the same name in the
+// Kubernetes apiserver/etcd code. Most of this method comment is copied from
+// its godoc.
+//
+// See https://github.com/kubernetes/apiserver/blob/544b6014f353b0f5e7c6fd2d3e04a7810d0ba5fc/pkg/storage/interfaces.go#L205-L238
 func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpdate updateFunc) (runtime.Object, error) {
 	for {
 		if err := ctx.Err(); err != nil {
