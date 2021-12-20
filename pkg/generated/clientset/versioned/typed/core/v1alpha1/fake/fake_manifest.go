@@ -109,7 +109,7 @@ func (c *FakeManifests) UpdateStatus(ctx context.Context, manifest *v1alpha1.Man
 // Delete takes name of the manifest and deletes it. Returns an error if one occurs.
 func (c *FakeManifests) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
 	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteAction(manifestsResource, name), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootDeleteActionWithOptions(manifestsResource, name, opts), &v1alpha1.Manifest{})
 	return err
 }
 
