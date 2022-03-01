@@ -287,6 +287,33 @@ func TestFilepathREST_Update_SimultaneousUpdates(t *testing.T) {
 	}
 }
 
+// https://github.com/tilt-dev/tilt/issues/5541
+func TestFilepathREST_UpdateIdentical(t *testing.T) {
+	f := newRESTFixture(t)
+	defer f.tearDown()
+
+	var obj runtime.Object
+	obj = &v1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test-obj",
+		},
+		Spec: v1alpha1.ManifestSpec{
+			Message: "original",
+		},
+	}
+
+	f.mustCreate(obj)
+
+	result, err := f.update("test-obj", func(obj runtime.Object) {})
+	require.NoError(t, err)
+
+	// ideally we'd just compare the object after `update` to the object after `create`, but:
+	// 1) the result of create doesn't have a populated TypeMeta, and the result of update does
+	// 2) the result of update has a truncated CreationTimestamp
+	actual := result.(*v1alpha1.Manifest)
+	require.Equal(t, "1", actual.ResourceVersion)
+}
+
 type restOptionsGetter struct {
 	codec runtime.Codec
 }
