@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/watch"
+	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
@@ -371,6 +372,7 @@ func newRESTFixtureWithStrategy(t *testing.T,
 	opts := &restOptionsGetter{codec: codec}
 
 	rootCtx, cancel := context.WithCancel(context.Background())
+	rootCtx = genericapirequest.WithNamespace(rootCtx, metav1.NamespaceNone)
 
 	storage, err := sp(scheme, opts)
 	require.NoError(t, err, "Failed to create storage provider for test setup")
