@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -124,16 +125,29 @@ func TestMissingCertData(t *testing.T) {
 	client, err := versioned.NewForConfig(loopback)
 	require.NoError(t, err)
 
+	hasCertError := func(msg string) bool {
+		failMessages := []string{
+			"certificate signed by unknown authority",
+			"certificate is not standards compliant", // https://github.com/golang/go/issues/51991 (macos only)
+		}
+		for _, fail := range failMessages {
+			if strings.Contains(msg, fail) {
+				return true
+			}
+		}
+		return false
+	}
+
 	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
 	}, metav1.CreateOptions{})
 	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "x509: certificate signed by unknown authority")
+		assert.True(t, hasCertError(err.Error()))
 	}
 
 	_, err = client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
 	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "x509: certificate signed by unknown authority")
+		assert.True(t, hasCertError(err.Error()))
 	}
 }
 
