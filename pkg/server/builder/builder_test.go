@@ -58,7 +58,7 @@ func TestBindToPort9444(t *testing.T) {
 	config, err := options.Config()
 	require.NoError(t, err)
 
-	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx.Done())
+	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx)
 	require.NoError(t, err)
 
 	client, err := versioned.NewForConfig(config.GenericConfig.LoopbackClientConfig)
@@ -438,7 +438,7 @@ func newFixture(t *testing.T) *fixture {
 	config, err := options.Config()
 	require.NoError(t, err)
 
-	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx.Done())
+	stoppedCh, err := options.RunTiltServerFromConfig(config.Complete(), ctx)
 	require.NoError(t, err)
 
 	client, err := versioned.NewForConfig(config.GenericConfig.LoopbackClientConfig)
