@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	"k8s.io/apiserver/pkg/server/options"
 	"k8s.io/apiserver/pkg/storage/storagebackend"
@@ -106,11 +107,16 @@ type fixture struct {
 	t       *testing.T
 	dir     string
 	storage rest.StandardStorage
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 func newFixture(t *testing.T, fs filepath.FS) *fixture {
 	dir, err := ioutil.TempDir("", strings.Replace(t.Name(), "/", "_", -1))
 	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = genericapirequest.WithNamespace(ctx, metav1.NamespaceNone)
 
 	scheme := runtime.NewScheme()
 	err = v1alpha1.AddToScheme(scheme)
@@ -135,23 +141,25 @@ func newFixture(t *testing.T, fs filepath.FS) *fixture {
 		t:       t,
 		dir:     dir,
 		storage: storage.(rest.StandardStorage),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 
 func (f *fixture) TestReadEmpty() {
-	_, err := f.storage.Get(context.Background(), "my-manifest", &metav1.GetOptions{})
+	_, err := f.storage.Get(f.ctx, "my-manifest", &metav1.GetOptions{})
 	if assert.Error(f.t, err) {
 		assert.True(f.t, apierrors.IsNotFound(err))
 	}
 }
 
 func (f *fixture) TestCreateThenRead() {
-	_, err := f.storage.Create(context.Background(), &Manifest{
+	_, err := f.storage.Create(f.ctx, &Manifest{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-manifest"},
 	}, nil, &metav1.CreateOptions{})
 	require.NoError(f.t, err)
 
-	obj, err := f.storage.Get(context.Background(), "my-manifest", &metav1.GetOptions{})
+	obj, err := f.storage.Get(f.ctx, "my-manifest", &metav1.GetOptions{})
 	require.NoError(f.t, err)
 
 	createdAt := obj.(*Manifest).ObjectMeta.CreationTimestamp.Time
@@ -159,18 +167,18 @@ func (f *fixture) TestCreateThenRead() {
 }
 
 func (f *fixture) TestCreateThenList() {
-	obj, err := f.storage.List(context.Background(), nil)
+	obj, err := f.storage.List(f.ctx, nil)
 	require.NoError(f.t, err)
 
 	manifestList := obj.(*ManifestList)
 	assert.Equal(f.t, 0, len(manifestList.Items))
 
-	_, err = f.storage.Create(context.Background(), &Manifest{
+	_, err = f.storage.Create(f.ctx, &Manifest{
 		ObjectMeta: metav1.ObjectMeta{Name: "my-manifest"},
 	}, nil, &metav1.CreateOptions{})
 	require.NoError(f.t, err)
 
-	obj, err = f.storage.List(context.Background(), nil)
+	obj, err = f.storage.List(f.ctx, nil)
 	require.NoError(f.t, err)
 
 	manifestList = obj.(*ManifestList)
@@ -178,45 +186,45 @@ func (f *fixture) TestCreateThenList() {
 }
 
 func (f *fixture) TestCreateThenReadThenDelete() {
-	_, err := f.storage.Create(context.Background(), &Manifest{
+	_, err := f.storage.Create(f.ctx, &Manifest{
 		TypeMeta:   metav1.TypeMeta{Kind: "Manifest", APIVersion: "core.tilt.dev/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "my-manifest"},
 	}, nil, &metav1.CreateOptions{})
 	require.NoError(f.t, err)
 
-	obj, err := f.storage.Get(context.Background(), "my-manifest", &metav1.GetOptions{})
+	obj, err := f.storage.Get(f.ctx, "my-manifest", &metav1.GetOptions{})
 	require.NoError(f.t, err)
 
 	createdAt := obj.(*Manifest).ObjectMeta.CreationTimestamp.Time
 	assert.True(f.t, !createdAt.IsZero())
 
-	_, _, err = f.storage.Delete(context.Background(), "my-manifest", nil, &metav1.DeleteOptions{})
+	_, _, err = f.storage.Delete(f.ctx, "my-manifest", nil, &metav1.DeleteOptions{})
 	require.NoError(f.t, err)
 
-	_, err = f.storage.Get(context.Background(), "my-manifest", &metav1.GetOptions{})
+	_, err = f.storage.Get(f.ctx, "my-manifest", &metav1.GetOptions{})
 	if assert.Error(f.t, err) {
 		assert.True(f.t, apierrors.IsNotFound(err))
 	}
 }
 
 func (f *fixture) TestDelete() {
-	_, _, err := f.storage.Delete(context.Background(), "my-manifest", nil, &metav1.DeleteOptions{})
+	_, _, err := f.storage.Delete(f.ctx, "my-manifest", nil, &metav1.DeleteOptions{})
 	if assert.Error(f.t, err) {
 		assert.True(f.t, apierrors.IsNotFound(err))
 	}
 }
 
 func (f *fixture) TestListLabelSelector() {
-	_, err := f.storage.Create(context.Background(), &Manifest{
+	_, err := f.storage.Create(f.ctx, &Manifest{
 		ObjectMeta: metav1.ObjectMeta{Name: "foo-1", Labels: map[string]string{"group": "foo"}},
 	}, nil, &metav1.CreateOptions{})
 	require.NoError(f.t, err)
-	_, err = f.storage.Create(context.Background(), &Manifest{
+	_, err = f.storage.Create(f.ctx, &Manifest{
 		ObjectMeta: metav1.ObjectMeta{Name: "bar-1", Labels: map[string]string{"group": "bar"}},
 	}, nil, &metav1.CreateOptions{})
 	require.NoError(f.t, err)
 
-	list, err := f.storage.List(context.Background(), &internalversion.ListOptions{
+	list, err := f.storage.List(f.ctx, &internalversion.ListOptions{
 		LabelSelector: labels.SelectorFromSet(labels.Set{"group": "bar"}),
 	})
 	require.NoError(f.t, err)
@@ -227,7 +235,7 @@ func (f *fixture) TestListLabelSelector() {
 }
 
 func (f *fixture) TestWatchLabelSelector() {
-	ctx := context.Background()
+	ctx := f.ctx
 	w, err := f.storage.Watch(ctx, &internalversion.ListOptions{
 		LabelSelector: labels.SelectorFromSet(labels.Set{"group": "foo"}),
 	})
@@ -269,5 +277,6 @@ func (f *fixture) TestWatchLabelSelector() {
 }
 
 func (f *fixture) TearDown() {
+	f.cancel()
 	_ = os.Remove(f.dir)
 }

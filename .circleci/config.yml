@@ -4,8 +4,8 @@ orbs:
 jobs:
   build:
     docker:
-      - image: circleci/golang:1.17
-    working_directory: /go/src/github.com/tilt-dev/tilt-apiserver
+      - image: cimg/go:1.18
+    working_directory: /home/circleci/go/src/github.com/tilt-dev/tilt-apiserver
     steps:
       - checkout
       - run: make test verify-generate
