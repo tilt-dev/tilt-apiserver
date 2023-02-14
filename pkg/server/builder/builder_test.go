@@ -94,12 +94,34 @@ func TestMemConn(t *testing.T) {
 	assert.False(t, obj.CreationTimestamp.Time.IsZero())
 }
 
-func TestUnauthorizedAccess(t *testing.T) {
+func TestBadBearerToken(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
 
 	loopback := rest.CopyConfig(f.config.GenericConfig.LoopbackClientConfig)
 	loopback.BearerToken = "bad-bearer-token"
+	client, err := versioned.NewForConfig(loopback)
+	require.NoError(t, err)
+
+	_, err = client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+	}, metav1.CreateOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "Everything is forbidden")
+	}
+
+	_, err = client.CoreV1alpha1().Manifests().Get(f.ctx, "my-server", metav1.GetOptions{})
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "Everything is forbidden")
+	}
+}
+
+func TestMissingBearerToken(t *testing.T) {
+	f := newFixture(t)
+	defer f.tearDown()
+
+	loopback := rest.CopyConfig(f.config.GenericConfig.LoopbackClientConfig)
+	loopback.BearerToken = ""
 	client, err := versioned.NewForConfig(loopback)
 	require.NoError(t, err)
 
