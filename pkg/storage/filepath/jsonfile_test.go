@@ -123,12 +123,14 @@ func newFixture(t *testing.T, fs filepath.FS) *fixture {
 	require.NoError(t, err)
 
 	codec := serializer.NewCodecFactory(scheme).LegacyCodec(v1alpha1.SchemeGroupVersion)
-	options := &options.SimpleRestOptionsFactory{
+	storageConfig := storagebackend.Config{
+		Codec: codec,
+	}
+	options := &options.StorageFactoryRestOptionsFactory{
 		Options: options.EtcdOptions{
-			StorageConfig: storagebackend.Config{
-				Codec: codec,
-			},
+			StorageConfig: storageConfig,
 		},
+		StorageFactory: &options.SimpleStorageFactory{StorageConfig: storageConfig},
 	}
 
 	ws := filepath.NewWatchSet()
