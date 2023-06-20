@@ -59,6 +59,7 @@ type ManifestSpec struct {
 var _ resource.Object = &Manifest{}
 var _ resourcestrategy.Validater = &Manifest{}
 var _ resourcerest.ShortNamesProvider = &Manifest{}
+var _ resourcerest.SingularNameProvider = &Manifest{}
 
 func (in *Manifest) GetObjectMeta() *metav1.ObjectMeta {
 	return &in.ObjectMeta
@@ -78,6 +79,10 @@ func (in *Manifest) NewList() runtime.Object {
 
 func (in *Manifest) ShortNames() []string {
 	return []string{"m"}
+}
+
+func (in *Manifest) GetSingularName() string {
+	return "manifest"
 }
 
 func (in *Manifest) GetGroupVersionResource() schema.GroupVersionResource {
