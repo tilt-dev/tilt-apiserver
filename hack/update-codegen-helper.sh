@@ -23,18 +23,24 @@ export GOPATH
 SCRIPT_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-generator 2>/dev/null || echo ../code-generator)}
 
+git config --global --add safe.directory /go/src/github.com/tilt-dev/tilt-apiserver
+
 # generate the code with:
 # --output-base    because this script should also be able to run inside the vendor dir of
 #                  k8s.io/kubernetes. The output-base is needed for the generators to output into the vendor dir
 #                  instead of the $GOPATH directly. For normal projects this can be dropped.
-bash "${CODEGEN_PKG}/generate-groups.sh" all \
-  github.com/tilt-dev/tilt-apiserver/pkg/generated github.com/tilt-dev/tilt-apiserver/pkg/apis \
-  "core:v1alpha1" \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
-  --go-header-file "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+source "${CODEGEN_PKG}/kube_codegen.sh"
 
-bash "${CODEGEN_PKG}/generate-internal-groups.sh" "deepcopy,defaulter,openapi" \
-  github.com/tilt-dev/tilt-apiserver/pkg/generated github.com/tilt-dev/tilt-apiserver/pkg/apis github.com/tilt-dev/tilt-apiserver/pkg/apis \
-  "core:v1alpha1" \
+kube::codegen::gen_helpers \
+  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
-  --go-header-file "${SCRIPT_ROOT}/hack/boilerplate.go.txt"
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+
+kube::codegen::gen_client \
+  --with-watch \
+  --with-applyconfig \
+  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
+  --output-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/generated \
+  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+

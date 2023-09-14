@@ -28,6 +28,7 @@ const GroupName = "core.tilt.dev"
 const Version = "v1alpha1"
 
 // SchemeGroupVersion is group version used to register these objects
+var localSchemeBuilder = runtime.NewSchemeBuilder(AddToScheme)
 var SchemeGroupVersion = schema.GroupVersion{Group: GroupName, Version: Version}
 
 var AddToScheme = func(scheme *runtime.Scheme) error {
