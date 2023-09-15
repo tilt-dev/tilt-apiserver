@@ -22,7 +22,7 @@ vet:
 	go vet ./...
 
 # Generate code
-generate: pkg/apis/core/v1alpha1/manifest_types.go hack/update-codegen.sh
+generate: pkg/apis/core/v1alpha1/types.go hack/update-codegen.sh
 	hack/update-codegen.sh
 
 verify-generate:

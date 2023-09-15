@@ -25,17 +25,16 @@ CODEGEN_PKG=${CODEGEN_PKG:-$(cd "${SCRIPT_ROOT}"; ls -d -1 ./vendor/k8s.io/code-
 
 git config --global --add safe.directory /go/src/github.com/tilt-dev/tilt-apiserver
 
-# generate the code with:
-# --output-base    because this script should also be able to run inside the vendor dir of
-#                  k8s.io/kubernetes. The output-base is needed for the generators to output into the vendor dir
-#                  instead of the $GOPATH directly. For normal projects this can be dropped.
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
+rm pkg/apis/**/zz_generated*
 kube::codegen::gen_helpers \
   --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
   --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
 
+rm -fR pkg/generated
+mkdir -p pkg/generated
 kube::codegen::gen_client \
   --with-watch \
   --with-applyconfig \
@@ -44,3 +43,10 @@ kube::codegen::gen_client \
   --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
   --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
 
+kube::codegen::gen_openapi \
+  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
+  --output-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/generated \
+  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
+  --report-filename "${SCRIPT_ROOT}"/hack/api_violations.list \
+  --update-report \
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
