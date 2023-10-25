@@ -135,7 +135,7 @@ func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 		m.Spec.Message = "updated"
 	})
 
-	require.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	require.Equal(t, "3", f.mustMeta(obj).GetResourceVersion())
 	require.Equal(t, "updated", obj.(*v1alpha1.Manifest).Spec.Message)
 
 	obj, err := f.update("test-obj", func(obj runtime.Object) {
@@ -151,7 +151,7 @@ func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 	obj, err = f.get("test-obj")
 	require.NoError(t, err, "Failed to fetch object")
 	// object should not have changed
-	require.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	require.Equal(t, "3", f.mustMeta(obj).GetResourceVersion())
 	require.Equal(t, "updated", obj.(*v1alpha1.Manifest).Spec.Message)
 }
 
@@ -182,13 +182,13 @@ func TestFilepathREST_Update_OptimisticConcurrency_Subresource(t *testing.T) {
 		m.Status.Message = "updated_status_message"
 	})
 
-	assert.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	assert.Equal(t, "3", f.mustMeta(obj).GetResourceVersion())
 	assert.Equal(t, "spec_message", obj.(*v1alpha1.Manifest).Spec.Message)
 	require.Equal(t, "updated_status_message", obj.(*v1alpha1.Manifest).Status.Message)
 
 	obj, err := f.update("test-obj", func(obj runtime.Object) {
 		m := obj.(*v1alpha1.Manifest)
-		m.SetResourceVersion("1")
+		m.SetResourceVersion("2")
 		m.Status.Message = "impossible"
 	})
 
@@ -200,7 +200,7 @@ func TestFilepathREST_Update_OptimisticConcurrency_Subresource(t *testing.T) {
 	obj, err = f.get("test-obj")
 	require.NoError(t, err, "Failed to fetch object")
 	// object should not have changed
-	assert.Equal(t, "2", f.mustMeta(obj).GetResourceVersion())
+	assert.Equal(t, "3", f.mustMeta(obj).GetResourceVersion())
 	assert.Equal(t, "updated_status_message", obj.(*v1alpha1.Manifest).Status.Message)
 }
 
@@ -312,7 +312,7 @@ func TestFilepathREST_UpdateIdentical(t *testing.T) {
 	// 1) the result of create doesn't have a populated TypeMeta, and the result of update does
 	// 2) the result of update has a truncated CreationTimestamp
 	actual := result.(*v1alpha1.Manifest)
-	require.Equal(t, "1", actual.ResourceVersion)
+	require.Equal(t, "2", actual.ResourceVersion)
 }
 
 type restOptionsGetter struct {

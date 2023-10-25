@@ -30,7 +30,7 @@ type Manifest = v1alpha1.Manifest
 type ManifestList = v1alpha1.ManifestList
 
 func fileSystems() []filepath.FS {
-	return []filepath.FS{filepath.RealFS{}, filepath.NewMemoryFS()}
+	return []filepath.FS{filepath.NewRealFS(), filepath.NewMemoryFS()}
 }
 
 func TestReadEmpty(t *testing.T) {
@@ -185,6 +185,8 @@ func (f *fixture) TestCreateThenList() {
 
 	manifestList = obj.(*ManifestList)
 	assert.Equal(f.t, 1, len(manifestList.Items))
+	assert.Equal(f.t, manifestList.Items[0].ResourceVersion, manifestList.ResourceVersion)
+	assert.NotEqual(f.t, "", manifestList.ResourceVersion)
 }
 
 func (f *fixture) TestCreateThenReadThenDelete() {
