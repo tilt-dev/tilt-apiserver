@@ -1,6 +1,6 @@
 module github.com/tilt-dev/tilt-apiserver
 
-go 1.20
+go 1.21
 
 require (
 	github.com/akutz/memconn v0.1.0
