@@ -34,6 +34,9 @@ cleanup
 mkdir -p "${TMP_DIFFROOT}"
 cp -a "${DIFFROOT}"/* "${TMP_DIFFROOT}"
 
+export CODEGEN_UID=$(id -u);
+export CODEGEN_GID=$(id -g);
+
 "${SCRIPT_ROOT}/hack/update-codegen-helper.sh"
 echo "diffing ${DIFFROOT} against freshly generated codegen"
 ret=0

@@ -50,3 +50,17 @@ kube::codegen::gen_openapi \
   --report-filename "${SCRIPT_ROOT}"/hack/api_violations.list \
   --update-report \
   --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+
+if [[ "$CODEGEN_UID" != "$(id -u)" ]]; then
+    groupadd --gid "$CODEGEN_GID" codegen-user
+    useradd --uid "$CODEGEN_UID" -g codegen-user codegen-user
+
+    find pkg | while read f; do
+        if [ -d "$f" ]; then
+            chmod 775 "$f"
+        else
+            chmod 664 "$f"
+        fi
+        chown codegen-user:codegen-user "$f"
+    done
+fi
