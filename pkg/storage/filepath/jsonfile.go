@@ -4,7 +4,6 @@ package filepath
 import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
-	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apiserver/pkg/registry/generic"
 	"k8s.io/apiserver/pkg/registry/rest"
@@ -15,19 +14,19 @@ import (
 //   - For namespaced-scoped resources: the resource will be written under the root-path in
 //     the following structure:
 //
-//     -- (root-path) --- /namespace1/ --- resource1
-//     |                |
-//     |                --- resource2
-//     |
-//     --- /namespace2/ --- resource3
+//       -- (root-path) --- /namespace1/ --- resource1
+//                      |                |
+//                      |                --- resource2
+//                      |
+//                      --- /namespace2/ --- resource3
 //
 //   - For cluster-scoped resources, there will be no mid-layer folders for namespaces:
 //
-//     -- (root-path) --- resource1
-//     |
-//     --- resource2
-//     |
-//     --- resource3
+//       -- (root-path) --- resource1
+//                      |
+//                      --- resource2
+//                      |
+//                      --- resource3
 //
 // Args:
 //
@@ -35,7 +34,7 @@ import (
 // watchSet: Storage for watchers to be notified of this resource type. Each type should have its own
 //
 //	WatchSet, but subresources (like the status subresource) should share a WatchSet with their parent.
-func NewJSONFilepathStorageProvider(obj resource.Object, rootPath string, fs filesystem.FS, watchSet *filesystem.WatchSet, strategy Strategy) builderrest.ResourceHandlerProvider {
+func NewJSONFilepathStorageProvider(obj resource.Object, rootPath string, fs FS, watchSet *WatchSet, strategy Strategy) builderrest.ResourceHandlerProvider {
 	return func(scheme *runtime.Scheme, getter generic.RESTOptionsGetter) (rest.Storage, error) {
 		gr := obj.GetGroupVersionResource().GroupResource()
 		opt, err := getter.GetRESTOptions(gr)

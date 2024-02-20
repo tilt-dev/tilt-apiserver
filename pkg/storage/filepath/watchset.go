@@ -1,4 +1,4 @@
-package filesystem
+package filepath
 
 import (
 	"sync"
@@ -22,7 +22,7 @@ func NewWatchSet() *WatchSet {
 
 // Creates a new watch with a unique id, but
 // does not start sending events to it until start() is called.
-func (s *WatchSet) NewWatch() *watchNode {
+func (s *WatchSet) newWatch() *watchNode {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -36,7 +36,7 @@ func (s *WatchSet) NewWatch() *watchNode {
 	}
 }
 
-func (s *WatchSet) NotifyWatchers(ev watch.Event) {
+func (s *WatchSet) notifyWatchers(ev watch.Event) {
 	s.mu.RLock()
 	for _, w := range s.nodes {
 		w.updateCh <- ev

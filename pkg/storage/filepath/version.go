@@ -1,4 +1,4 @@
-package filesystem
+package filepath
 
 import (
 	"fmt"
@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-func GetResourceVersion(obj runtime.Object) (uint64, error) {
+func getResourceVersion(obj runtime.Object) (uint64, error) {
 	if obj == nil {
 		return 0, nil
 	}
@@ -16,10 +16,10 @@ func GetResourceVersion(obj runtime.Object) (uint64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return ParseResourceVersion(objMeta.GetResourceVersion())
+	return parseResourceVersion(objMeta.GetResourceVersion())
 }
 
-func SetResourceVersion(obj runtime.Object, v uint64) error {
+func setResourceVersion(obj runtime.Object, v uint64) error {
 	if v <= 0 {
 		return fmt.Errorf("resourceVersion must be positive: %d", v)
 	}
@@ -28,11 +28,11 @@ func SetResourceVersion(obj runtime.Object, v uint64) error {
 	if err != nil {
 		return err
 	}
-	objMeta.SetResourceVersion(FormatResourceVersion(v))
+	objMeta.SetResourceVersion(formatResourceVersion(v))
 	return nil
 }
 
-func ClearResourceVersion(obj runtime.Object) error {
+func clearResourceVersion(obj runtime.Object) error {
 	objMeta, err := meta.CommonAccessor(obj)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ func ClearResourceVersion(obj runtime.Object) error {
 	return nil
 }
 
-func ParseResourceVersion(v string) (uint64, error) {
+func parseResourceVersion(v string) (uint64, error) {
 	if v == "" {
 		return 0, nil
 	}
@@ -52,6 +52,6 @@ func ParseResourceVersion(v string) (uint64, error) {
 	return version, nil
 }
 
-func FormatResourceVersion(v uint64) string {
+func formatResourceVersion(v uint64) string {
 	return strconv.FormatUint(v, 10)
 }

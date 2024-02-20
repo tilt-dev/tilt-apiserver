@@ -21,7 +21,6 @@ import (
 
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource/resourcestrategy"
-	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -93,7 +92,7 @@ type StatusSubResource interface {
 // GenericSubResource defines interface for registering arbitrary subresource to the parent resource.
 type GenericSubResource interface {
 	Name() string
-	GetStorageProvider(parentObj Object, rootPath string, fs filesystem.FS, parentWatchSet *filesystem.WatchSet, parentSP apiserver.StorageProvider) apiserver.StorageProvider
+	GetStorageProvider(parentObj Object, rootPath string, parentSP apiserver.StorageProvider) apiserver.StorageProvider
 }
 
 // ObjectWithStatusSubResource defines an interface for getting and setting the status sub-resource for a resource.

@@ -5,15 +5,14 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/resource"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
-	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // Registers a request handler for the resource that stores it on the file system.
 func (a *Server) WithResourceFileStorage(obj resource.Object, path string) *Server {
-	fs := filesystem.NewRealFS()
-	ws := filesystem.NewWatchSet()
+	fs := filepath.NewRealFS()
+	ws := filepath.NewWatchSet()
 	strategy := rest.DefaultStrategy{
 		Object:      obj,
 		ObjectTyper: a.apiScheme,
@@ -27,9 +26,9 @@ func (a *Server) WithResourceFileStorage(obj resource.Object, path string) *Serv
 // Registers a request handler for the resource that stores it in memory.
 func (a *Server) WithResourceMemoryStorage(obj resource.Object, path string) *Server {
 	if a.memoryFS == nil {
-		a.memoryFS = filesystem.NewMemoryFS()
+		a.memoryFS = filepath.NewMemoryFS()
 	}
-	ws := filesystem.NewWatchSet()
+	ws := filepath.NewWatchSet()
 	strategy := rest.DefaultStrategy{
 		Object:      obj,
 		ObjectTyper: a.apiScheme,
@@ -114,7 +113,7 @@ func (a *Server) withGroupVersions(versions ...schema.GroupVersion) *Server {
 	return a
 }
 
-func (a *Server) withSubresources(obj resource.Object, path string, fs filesystem.FS, ws *filesystem.WatchSet, strategy rest.DefaultStrategy, parentSP apiserver.StorageProvider) *Server {
+func (a *Server) withSubresources(obj resource.Object, path string, fs filepath.FS, ws *filepath.WatchSet, strategy rest.DefaultStrategy, parentSP apiserver.StorageProvider) *Server {
 	if _, ok := obj.(resource.ObjectWithStatusSubResource); ok {
 		provider := filepath.NewJSONFilepathStorageProvider(
 			obj, path, fs, ws, rest.StatusSubResourceStrategy{Strategy: strategy})
@@ -124,7 +123,7 @@ func (a *Server) withSubresources(obj resource.Object, path string, fs filesyste
 
 	if owas, ok := obj.(resource.ObjectWithGenericSubResource); ok {
 		for _, subResource := range owas.GenericSubResources() {
-			a.WithSubResourceAndHandler(obj, subResource.Name(), subResource.GetStorageProvider(obj, subResource.Name(), fs, ws, parentSP))
+			a.WithSubResourceAndHandler(obj, subResource.Name(), subResource.GetStorageProvider(obj, subResource.Name(), parentSP))
 		}
 	}
 
