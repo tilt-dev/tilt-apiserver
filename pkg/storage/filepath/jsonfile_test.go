@@ -13,6 +13,7 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	"golang.org/x/sync/errgroup"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -29,8 +30,8 @@ import (
 type Manifest = v1alpha1.Manifest
 type ManifestList = v1alpha1.ManifestList
 
-func fileSystems() []filepath.FS {
-	return []filepath.FS{filepath.NewRealFS(), filepath.NewMemoryFS()}
+func fileSystems() []filesystem.FS {
+	return []filesystem.FS{filesystem.NewRealFS(), filesystem.NewMemoryFS()}
 }
 
 func TestReadEmpty(t *testing.T) {
@@ -111,7 +112,7 @@ type fixture struct {
 	cancel  context.CancelFunc
 }
 
-func newFixture(t *testing.T, fs filepath.FS) *fixture {
+func newFixture(t *testing.T, fs filesystem.FS) *fixture {
 	dir, err := ioutil.TempDir("", strings.Replace(t.Name(), "/", "_", -1))
 	require.NoError(t, err)
 
@@ -133,7 +134,7 @@ func newFixture(t *testing.T, fs filepath.FS) *fixture {
 		StorageFactory: &options.SimpleStorageFactory{StorageConfig: storageConfig},
 	}
 
-	ws := filepath.NewWatchSet()
+	ws := filesystem.NewWatchSet()
 	strategy := builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &Manifest{}}
 	provider := filepath.NewJSONFilepathStorageProvider(&Manifest{}, dir, fs, ws, strategy)
 	storage, err := provider(scheme, options)

@@ -28,6 +28,7 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	builderrest "github.com/tilt-dev/tilt-apiserver/pkg/server/builder/rest"
 	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 )
 
 func TestFilepathREST_Delete_NoFinalizers(t *testing.T) {
@@ -348,8 +349,8 @@ func newRESTFixtureWithStrategy(t *testing.T,
 	strategyFn func(defaultStrategy builderrest.Strategy) builderrest.Strategy) *restFixture {
 	t.Helper()
 
-	fs := filepath.NewMemoryFS()
-	ws := filepath.NewWatchSet()
+	fs := filesystem.NewMemoryFS()
+	ws := filesystem.NewWatchSet()
 
 	dir, err := ioutil.TempDir("", strings.Replace(t.Name(), "/", "_", -1))
 	require.NoError(t, err)

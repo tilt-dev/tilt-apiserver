@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metainternalversion "k8s.io/apimachinery/pkg/apis/meta/internalversion"
@@ -39,8 +40,8 @@ var _ rest.SingularNameProvider = &filepathREST{}
 
 // NewFilepathREST instantiates a new REST storage.
 func NewFilepathREST(
-	fs FS,
-	ws *WatchSet,
+	fs filesystem.FS,
+	ws *filesystem.WatchSet,
 	strategy Strategy,
 	groupResource schema.GroupResource,
 	codec runtime.Codec,
@@ -78,12 +79,12 @@ type filepathREST struct {
 
 	strategy      Strategy
 	groupResource schema.GroupResource
-	fs            FS
-	watchSet      *WatchSet
+	fs            filesystem.FS
+	watchSet      *filesystem.WatchSet
 }
 
 func (f *filepathREST) notifyWatchers(ev watch.Event) {
-	f.watchSet.notifyWatchers(ev)
+	f.watchSet.NotifyWatchers(ev)
 }
 
 func (f *filepathREST) New() runtime.Object {
@@ -149,7 +150,7 @@ func (f *filepathREST) List(
 		return nil, fmt.Errorf("failed walking filepath %v: %v", dirname, err)
 	}
 
-	err = setResourceVersion(newListObj, rev)
+	err = filesystem.SetResourceVersion(newListObj, rev)
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +198,7 @@ func (f *filepathREST) Create(
 	}
 
 	if err := f.fs.Write(f.codec, filename, obj, 0); err != nil {
-		if errors.Is(err, VersionError) {
+		if errors.Is(err, filesystem.VersionError) {
 			err = f.conflictErr(accessor.GetName())
 		}
 		return nil, err
@@ -234,7 +235,7 @@ func (f *filepathREST) Update(
 			}
 			isCreate = true
 		}
-		inputVersion, err := getResourceVersion(input)
+		inputVersion, err := filesystem.GetResourceVersion(input)
 		if err != nil {
 			return nil, err
 		}
@@ -259,7 +260,7 @@ func (f *filepathREST) Update(
 		// this check MUST happen before rest.BeforeUpdate is called - for subresource updates, it'll
 		// use the input (storage version) to copy the subresource to (to avoid changing the spec),
 		// so the version from the request object will be lost, breaking optimistic concurrency
-		updatedVersion, err := getResourceVersion(output)
+		updatedVersion, err := filesystem.GetResourceVersion(output)
 		if err != nil {
 			return nil, err
 		}
@@ -375,13 +376,13 @@ func (f *filepathREST) Delete(
 		zero := int64(0)
 		objMeta.SetDeletionGracePeriodSeconds(&zero)
 
-		version, err := getResourceVersion(oldObj)
+		version, err := filesystem.GetResourceVersion(oldObj)
 		if err != nil {
 			return nil, false, err
 		}
 
 		if err := f.fs.Write(f.codec, filename, oldObj, version); err != nil {
-			if errors.Is(err, VersionError) {
+			if errors.Is(err, filesystem.VersionError) {
 				err = f.conflictErr(name)
 			}
 			return nil, false, err
@@ -437,7 +438,7 @@ func (f *filepathREST) DeleteCollection(
 		return nil, fmt.Errorf("failed walking filepath %v: %v", dirname, err)
 	}
 
-	err = setResourceVersion(newListObj, rev)
+	err = filesystem.SetResourceVersion(newListObj, rev)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +504,7 @@ func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpd
 			// some objects allow create-on-update semantics, so NotFound is not terminal
 			return nil, err
 		}
-		storageVersion, err := getResourceVersion(storageObj)
+		storageVersion, err := filesystem.GetResourceVersion(storageObj)
 		if err != nil {
 			return nil, err
 		}
@@ -516,7 +517,7 @@ func (f *filepathREST) guaranteedUpdate(ctx context.Context, name string, tryUpd
 
 		filename := f.objectFileName(ctx, name)
 		if err := f.fs.Write(f.codec, filename, out, storageVersion); err != nil {
-			if errors.Is(err, VersionError) {
+			if errors.Is(err, filesystem.VersionError) {
 				// storage conflict, retry
 				continue
 			}
@@ -547,7 +548,7 @@ func getListPrt(listObj runtime.Object) (reflect.Value, error) {
 
 func (f *filepathREST) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	p := newSelectionPredicate(options)
-	jw := f.watchSet.newWatch()
+	jw := f.watchSet.NewWatch()
 
 	// On initial watch, send all the existing objects
 	list, err := f.List(ctx, options)

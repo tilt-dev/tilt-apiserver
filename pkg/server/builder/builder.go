@@ -25,7 +25,7 @@ import (
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/options"
 	"github.com/tilt-dev/tilt-apiserver/pkg/server/start"
-	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filepath"
+	"github.com/tilt-dev/tilt-apiserver/pkg/storage/filesystem"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -88,7 +88,7 @@ type Server struct {
 	codecs               serializer.CodecFactory
 	recommendedConfigFns []start.RecommendedConfigFn
 	apis                 map[schema.GroupVersionResource]apiserver.StorageProvider
-	memoryFS             *filepath.MemoryFS
+	memoryFS             *filesystem.MemoryFS
 	errs                 []error
 	storage              map[schema.GroupResource]*singletonProvider
 	groupVersions        map[schema.GroupVersion]bool

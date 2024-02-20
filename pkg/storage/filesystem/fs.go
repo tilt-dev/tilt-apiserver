@@ -1,4 +1,4 @@
-package filepath
+package filesystem
 
 import (
 	"bytes"
@@ -70,7 +70,7 @@ func (fs *RealFS) Write(encoder runtime.Encoder, filepath string, obj runtime.Ob
 	// Each write has last-one-wins semantics.
 	// 	(currently, this isn't a critical priority as our use cases that rely
 	// 	on RealFS do not have simultaneous writers)
-	if err := setResourceVersion(obj, rev); err != nil {
+	if err := SetResourceVersion(obj, rev); err != nil {
 		return err
 	}
 
@@ -234,7 +234,7 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object,
 	// where an update fails because of a changed version despite the object
 	// actually being identical)
 	versionlessObj := obj.DeepCopyObject()
-	if err := clearResourceVersion(versionlessObj); err != nil {
+	if err := ClearResourceVersion(versionlessObj); err != nil {
 		return err
 	}
 
@@ -274,7 +274,7 @@ func (fs *MemoryFS) Write(encoder runtime.Encoder, p string, obj runtime.Object,
 	// increment the resource version - it's applied to the object pointer for
 	// the caller in addition to being used to ensure the write is valid
 	newVersion := fs.incrementRev()
-	if err := setResourceVersion(obj, newVersion); err != nil {
+	if err := SetResourceVersion(obj, newVersion); err != nil {
 		return err
 	}
 
@@ -326,7 +326,7 @@ func (fs *MemoryFS) decodeBuffer(decoder runtime.Decoder, rawObj versionedData, 
 	if err != nil {
 		return nil, err
 	}
-	if err := setResourceVersion(decodedObj, rawObj.version); err != nil {
+	if err := SetResourceVersion(decodedObj, rawObj.version); err != nil {
 		return nil, err
 	}
 	return decodedObj, nil
