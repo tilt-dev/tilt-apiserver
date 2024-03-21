@@ -307,7 +307,7 @@ func (s *SecureServingOptions) MaybeDefaultWithSelfSignedCerts(publicAddress str
 		}
 	}
 
-	if !canReadCertAndKey {
+	if !canReadCertAndKey && s.ServerCert.GeneratedCert == nil {
 		// add either the bind address or localhost to the valid alternates
 		if s.BindAddress.IsUnspecified() {
 			alternateDNS = append(alternateDNS, "localhost")
