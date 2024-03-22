@@ -107,6 +107,9 @@ type GeneratableKeyCert struct {
 	// GeneratedCert holds an in-memory generated certificate if CertFile/KeyFile aren't explicitly set, and CertDirectory/PairName are not set.
 	GeneratedCert dynamiccertificates.CertKeyContentProvider
 
+	// Indicates whether GeneratedCert already has a pre-generated value (in which case it should not be regenerated).
+	PregeneratedCert bool
+
 	// FixtureDirectory is a directory that contains test fixture used to avoid regeneration of certs during tests.
 	// The format is:
 	// <host>_<ip>-<ip>_<alternateDNS>-<alternateDNS>.crt
@@ -288,6 +291,9 @@ func (s *SecureServingOptions) MaybeDefaultWithSelfSignedCerts(publicAddress str
 	if s == nil || (s.BindPort == 0 && s.Listener == nil) {
 		return nil
 	}
+	if s.ServerCert.PregeneratedCert {
+		return nil
+	}
 	keyCert := &s.ServerCert.CertKey
 	if len(keyCert.CertFile) != 0 || len(keyCert.KeyFile) != 0 {
 		return nil
@@ -307,7 +313,7 @@ func (s *SecureServingOptions) MaybeDefaultWithSelfSignedCerts(publicAddress str
 		}
 	}
 
-	if !canReadCertAndKey && s.ServerCert.GeneratedCert == nil {
+	if !canReadCertAndKey {
 		// add either the bind address or localhost to the valid alternates
 		if s.BindAddress.IsUnspecified() {
 			alternateDNS = append(alternateDNS, "localhost")
