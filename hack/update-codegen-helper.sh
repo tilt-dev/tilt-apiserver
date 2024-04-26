@@ -17,6 +17,7 @@
 set -o errexit
 set -o nounset
 set -o pipefail
+set -x
 
 GOPATH=$(go env GOPATH)
 export GOPATH
@@ -27,29 +28,29 @@ git config --global --add safe.directory /go/src/github.com/tilt-dev/tilt-apiser
 
 source "${CODEGEN_PKG}/kube_codegen.sh"
 
-rm pkg/apis/**/zz_generated*
+rm -fR pkg/apis/**/zz_generated*
 kube::codegen::gen_helpers \
-  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
-  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt \
+  ./pkg/apis
 
 rm -fR pkg/generated
 mkdir -p pkg/generated
 kube::codegen::gen_client \
   --with-watch \
   --with-applyconfig \
-  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
-  --output-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/generated \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
-  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+  --output-pkg github.com/tilt-dev/tilt-apiserver/pkg/generated \
+  --output-dir ./pkg/generated \
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt \
+  ./pkg/apis
 
+mkdir -p pkg/generated/openapi
 kube::codegen::gen_openapi \
-  --input-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/apis \
-  --output-pkg-root github.com/tilt-dev/tilt-apiserver/pkg/generated \
-  --output-base "$(dirname "${BASH_SOURCE[0]}")/../../../.." \
+  --output-pkg github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi \
+  --output-dir ./pkg/generated/openapi \
   --report-filename "${SCRIPT_ROOT}"/hack/api_violations.list \
   --update-report \
-  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt
+  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt \
+  ./pkg/apis
 
 if [[ "$CODEGEN_UID" != "$(id -u)" ]]; then
     groupadd --gid "$CODEGEN_GID" codegen-user

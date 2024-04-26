@@ -4,14 +4,14 @@ orbs:
 jobs:
   build:
     docker:
-      - image: cimg/go:1.21
+      - image: cimg/go:1.22
     working_directory: /home/circleci/go/src/github.com/tilt-dev/tilt-apiserver
     steps:
       - checkout
       - run: make test verify-generate
       - slack/notify-on-failure:
           only_for_branches: master
-        
+
 workflows:
   version: 2
   build:
