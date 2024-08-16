@@ -23,7 +23,7 @@ import (
 	v1 "k8s.io/client-go/applyconfigurations/meta/v1"
 )
 
-// ManifestApplyConfiguration represents an declarative configuration of the Manifest type for use
+// ManifestApplyConfiguration represents a declarative configuration of the Manifest type for use
 // with apply.
 type ManifestApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
@@ -32,7 +32,7 @@ type ManifestApplyConfiguration struct {
 	Status                           *ManifestStatusApplyConfiguration `json:"status,omitempty"`
 }
 
-// Manifest constructs an declarative configuration of the Manifest type for use with
+// Manifest constructs a declarative configuration of the Manifest type for use with
 // apply.
 func Manifest(name string) *ManifestApplyConfiguration {
 	b := &ManifestApplyConfiguration{}
@@ -214,4 +214,10 @@ func (b *ManifestApplyConfiguration) WithSpec(value *ManifestSpecApplyConfigurat
 func (b *ManifestApplyConfiguration) WithStatus(value *ManifestStatusApplyConfiguration) *ManifestApplyConfiguration {
 	b.Status = value
 	return b
+}
+
+// GetName retrieves the value of the Name field in the declarative configuration.
+func (b *ManifestApplyConfiguration) GetName() *string {
+	b.ensureObjectMetaApplyConfigurationExists()
+	return b.Name
 }

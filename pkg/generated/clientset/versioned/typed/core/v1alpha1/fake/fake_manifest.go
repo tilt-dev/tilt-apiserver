@@ -42,20 +42,22 @@ var manifestsKind = v1alpha1.SchemeGroupVersion.WithKind("Manifest")
 
 // Get takes name of the manifest, and returns the corresponding manifest object, and an error if there is any.
 func (c *FakeManifests) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.Manifest, err error) {
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootGetAction(manifestsResource, name), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootGetActionWithOptions(manifestsResource, name, options), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
 
 // List takes label and field selectors, and returns the list of Manifests that match those selectors.
 func (c *FakeManifests) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.ManifestList, err error) {
+	emptyResult := &v1alpha1.ManifestList{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootListAction(manifestsResource, manifestsKind, opts), &v1alpha1.ManifestList{})
+		Invokes(testing.NewRootListActionWithOptions(manifestsResource, manifestsKind, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 
 	label, _, _ := testing.ExtractFromListOptions(opts)
@@ -74,36 +76,39 @@ func (c *FakeManifests) List(ctx context.Context, opts v1.ListOptions) (result *
 // Watch returns a watch.Interface that watches the requested manifests.
 func (c *FakeManifests) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
 	return c.Fake.
-		InvokesWatch(testing.NewRootWatchAction(manifestsResource, opts))
+		InvokesWatch(testing.NewRootWatchActionWithOptions(manifestsResource, opts))
 }
 
 // Create takes the representation of a manifest and creates it.  Returns the server's representation of the manifest, and an error, if there is any.
 func (c *FakeManifests) Create(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.CreateOptions) (result *v1alpha1.Manifest, err error) {
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateAction(manifestsResource, manifest), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootCreateActionWithOptions(manifestsResource, manifest, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
 
 // Update takes the representation of a manifest and updates it. Returns the server's representation of the manifest, and an error, if there is any.
 func (c *FakeManifests) Update(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (result *v1alpha1.Manifest, err error) {
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateAction(manifestsResource, manifest), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootUpdateActionWithOptions(manifestsResource, manifest, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
 
 // UpdateStatus was generated because the type contains a Status member.
 // Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeManifests) UpdateStatus(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (*v1alpha1.Manifest, error) {
+func (c *FakeManifests) UpdateStatus(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (result *v1alpha1.Manifest, err error) {
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceAction(manifestsResource, "status", manifest), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(manifestsResource, "status", manifest, opts), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
@@ -117,7 +122,7 @@ func (c *FakeManifests) Delete(ctx context.Context, name string, opts v1.DeleteO
 
 // DeleteCollection deletes a collection of objects.
 func (c *FakeManifests) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionAction(manifestsResource, listOpts)
+	action := testing.NewRootDeleteCollectionActionWithOptions(manifestsResource, opts, listOpts)
 
 	_, err := c.Fake.Invokes(action, &v1alpha1.ManifestList{})
 	return err
@@ -125,10 +130,11 @@ func (c *FakeManifests) DeleteCollection(ctx context.Context, opts v1.DeleteOpti
 
 // Patch applies the patch and returns the patched manifest.
 func (c *FakeManifests) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.Manifest, err error) {
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(manifestsResource, name, pt, data, subresources...), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, name, pt, data, opts, subresources...), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
@@ -146,10 +152,11 @@ func (c *FakeManifests) Apply(ctx context.Context, manifest *corev1alpha1.Manife
 	if name == nil {
 		return nil, fmt.Errorf("manifest.Name must be provided to Apply")
 	}
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(manifestsResource, *name, types.ApplyPatchType, data), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
@@ -168,10 +175,11 @@ func (c *FakeManifests) ApplyStatus(ctx context.Context, manifest *corev1alpha1.
 	if name == nil {
 		return nil, fmt.Errorf("manifest.Name must be provided to Apply")
 	}
+	emptyResult := &v1alpha1.Manifest{}
 	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceAction(manifestsResource, *name, types.ApplyPatchType, data, "status"), &v1alpha1.Manifest{})
+		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, *name, types.ApplyPatchType, data, opts.ToPatchOptions(), "status"), emptyResult)
 	if obj == nil {
-		return nil, err
+		return emptyResult, err
 	}
 	return obj.(*v1alpha1.Manifest), err
 }
