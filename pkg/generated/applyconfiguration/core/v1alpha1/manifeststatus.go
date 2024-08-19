@@ -17,13 +17,13 @@ limitations under the License.
 
 package v1alpha1
 
-// ManifestStatusApplyConfiguration represents an declarative configuration of the ManifestStatus type for use
+// ManifestStatusApplyConfiguration represents a declarative configuration of the ManifestStatus type for use
 // with apply.
 type ManifestStatusApplyConfiguration struct {
 	Message *string `json:"message,omitempty"`
 }
 
-// ManifestStatusApplyConfiguration constructs an declarative configuration of the ManifestStatus type for use with
+// ManifestStatusApplyConfiguration constructs a declarative configuration of the ManifestStatus type for use with
 // apply.
 func ManifestStatus() *ManifestStatusApplyConfiguration {
 	return &ManifestStatusApplyConfiguration{}

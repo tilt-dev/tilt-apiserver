@@ -19,8 +19,8 @@ package v1alpha1
 
 import (
 	v1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/listers"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -38,30 +38,10 @@ type ManifestLister interface {
 
 // manifestLister implements the ManifestLister interface.
 type manifestLister struct {
-	indexer cache.Indexer
+	listers.ResourceIndexer[*v1alpha1.Manifest]
 }
 
 // NewManifestLister returns a new ManifestLister.
 func NewManifestLister(indexer cache.Indexer) ManifestLister {
-	return &manifestLister{indexer: indexer}
-}
-
-// List lists all Manifests in the indexer.
-func (s *manifestLister) List(selector labels.Selector) (ret []*v1alpha1.Manifest, err error) {
-	err = cache.ListAll(s.indexer, selector, func(m interface{}) {
-		ret = append(ret, m.(*v1alpha1.Manifest))
-	})
-	return ret, err
-}
-
-// Get retrieves the Manifest from the index for a given name.
-func (s *manifestLister) Get(name string) (*v1alpha1.Manifest, error) {
-	obj, exists, err := s.indexer.GetByKey(name)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, errors.NewNotFound(v1alpha1.Resource("manifest"), name)
-	}
-	return obj.(*v1alpha1.Manifest), nil
+	return &manifestLister{listers.New[*v1alpha1.Manifest](indexer, v1alpha1.Resource("manifest"))}
 }

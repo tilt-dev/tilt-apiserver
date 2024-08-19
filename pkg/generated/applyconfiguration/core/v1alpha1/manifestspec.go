@@ -17,13 +17,13 @@ limitations under the License.
 
 package v1alpha1
 
-// ManifestSpecApplyConfiguration represents an declarative configuration of the ManifestSpec type for use
+// ManifestSpecApplyConfiguration represents a declarative configuration of the ManifestSpec type for use
 // with apply.
 type ManifestSpecApplyConfiguration struct {
 	Message *string `json:"message,omitempty"`
 }
 
-// ManifestSpecApplyConfiguration constructs an declarative configuration of the ManifestSpec type for use with
+// ManifestSpecApplyConfiguration constructs a declarative configuration of the ManifestSpec type for use with
 // apply.
 func ManifestSpec() *ManifestSpecApplyConfiguration {
 	return &ManifestSpecApplyConfiguration{}

@@ -319,7 +319,7 @@ type restOptionsGetter struct {
 	codec runtime.Codec
 }
 
-func (r restOptionsGetter) GetRESTOptions(resource schema.GroupResource) (generic.RESTOptions, error) {
+func (r restOptionsGetter) GetRESTOptions(resource schema.GroupResource, obj runtime.Object) (generic.RESTOptions, error) {
 	return generic.RESTOptions{
 		StorageConfig: &storagebackend.ConfigForResource{
 			GroupResource: resource,
