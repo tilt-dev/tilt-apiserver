@@ -18,168 +18,33 @@ limitations under the License.
 package fake
 
 import (
-	"context"
-	json "encoding/json"
-	"fmt"
-
 	v1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/applyconfiguration/core/v1alpha1"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	labels "k8s.io/apimachinery/pkg/labels"
-	types "k8s.io/apimachinery/pkg/types"
-	watch "k8s.io/apimachinery/pkg/watch"
-	testing "k8s.io/client-go/testing"
+	typedcorev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned/typed/core/v1alpha1"
+	gentype "k8s.io/client-go/gentype"
 )
 
-// FakeManifests implements ManifestInterface
-type FakeManifests struct {
+// fakeManifests implements ManifestInterface
+type fakeManifests struct {
+	*gentype.FakeClientWithListAndApply[*v1alpha1.Manifest, *v1alpha1.ManifestList, *corev1alpha1.ManifestApplyConfiguration]
 	Fake *FakeCoreV1alpha1
 }
 
-var manifestsResource = v1alpha1.SchemeGroupVersion.WithResource("manifests")
-
-var manifestsKind = v1alpha1.SchemeGroupVersion.WithKind("Manifest")
-
-// Get takes name of the manifest, and returns the corresponding manifest object, and an error if there is any.
-func (c *FakeManifests) Get(ctx context.Context, name string, options v1.GetOptions) (result *v1alpha1.Manifest, err error) {
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootGetActionWithOptions(manifestsResource, name, options), emptyResult)
-	if obj == nil {
-		return emptyResult, err
+func newFakeManifests(fake *FakeCoreV1alpha1) typedcorev1alpha1.ManifestInterface {
+	return &fakeManifests{
+		gentype.NewFakeClientWithListAndApply[*v1alpha1.Manifest, *v1alpha1.ManifestList, *corev1alpha1.ManifestApplyConfiguration](
+			fake.Fake,
+			"",
+			v1alpha1.SchemeGroupVersion.WithResource("manifests"),
+			v1alpha1.SchemeGroupVersion.WithKind("Manifest"),
+			func() *v1alpha1.Manifest { return &v1alpha1.Manifest{} },
+			func() *v1alpha1.ManifestList { return &v1alpha1.ManifestList{} },
+			func(dst, src *v1alpha1.ManifestList) { dst.ListMeta = src.ListMeta },
+			func(list *v1alpha1.ManifestList) []*v1alpha1.Manifest { return gentype.ToPointerSlice(list.Items) },
+			func(list *v1alpha1.ManifestList, items []*v1alpha1.Manifest) {
+				list.Items = gentype.FromPointerSlice(items)
+			},
+		),
+		fake,
 	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// List takes label and field selectors, and returns the list of Manifests that match those selectors.
-func (c *FakeManifests) List(ctx context.Context, opts v1.ListOptions) (result *v1alpha1.ManifestList, err error) {
-	emptyResult := &v1alpha1.ManifestList{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootListActionWithOptions(manifestsResource, manifestsKind, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-
-	label, _, _ := testing.ExtractFromListOptions(opts)
-	if label == nil {
-		label = labels.Everything()
-	}
-	list := &v1alpha1.ManifestList{ListMeta: obj.(*v1alpha1.ManifestList).ListMeta}
-	for _, item := range obj.(*v1alpha1.ManifestList).Items {
-		if label.Matches(labels.Set(item.Labels)) {
-			list.Items = append(list.Items, item)
-		}
-	}
-	return list, err
-}
-
-// Watch returns a watch.Interface that watches the requested manifests.
-func (c *FakeManifests) Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error) {
-	return c.Fake.
-		InvokesWatch(testing.NewRootWatchActionWithOptions(manifestsResource, opts))
-}
-
-// Create takes the representation of a manifest and creates it.  Returns the server's representation of the manifest, and an error, if there is any.
-func (c *FakeManifests) Create(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.CreateOptions) (result *v1alpha1.Manifest, err error) {
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootCreateActionWithOptions(manifestsResource, manifest, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// Update takes the representation of a manifest and updates it. Returns the server's representation of the manifest, and an error, if there is any.
-func (c *FakeManifests) Update(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (result *v1alpha1.Manifest, err error) {
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateActionWithOptions(manifestsResource, manifest, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// UpdateStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-func (c *FakeManifests) UpdateStatus(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (result *v1alpha1.Manifest, err error) {
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootUpdateSubresourceActionWithOptions(manifestsResource, "status", manifest, opts), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// Delete takes name of the manifest and deletes it. Returns an error if one occurs.
-func (c *FakeManifests) Delete(ctx context.Context, name string, opts v1.DeleteOptions) error {
-	_, err := c.Fake.
-		Invokes(testing.NewRootDeleteActionWithOptions(manifestsResource, name, opts), &v1alpha1.Manifest{})
-	return err
-}
-
-// DeleteCollection deletes a collection of objects.
-func (c *FakeManifests) DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error {
-	action := testing.NewRootDeleteCollectionActionWithOptions(manifestsResource, opts, listOpts)
-
-	_, err := c.Fake.Invokes(action, &v1alpha1.ManifestList{})
-	return err
-}
-
-// Patch applies the patch and returns the patched manifest.
-func (c *FakeManifests) Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.Manifest, err error) {
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, name, pt, data, opts, subresources...), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// Apply takes the given apply declarative configuration, applies it and returns the applied manifest.
-func (c *FakeManifests) Apply(ctx context.Context, manifest *corev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.Manifest, err error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("manifest provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(manifest)
-	if err != nil {
-		return nil, err
-	}
-	name := manifest.Name
-	if name == nil {
-		return nil, fmt.Errorf("manifest.Name must be provided to Apply")
-	}
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, *name, types.ApplyPatchType, data, opts.ToPatchOptions()), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
-}
-
-// ApplyStatus was generated because the type contains a Status member.
-// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-func (c *FakeManifests) ApplyStatus(ctx context.Context, manifest *corev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.Manifest, err error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("manifest provided to Apply must not be nil")
-	}
-	data, err := json.Marshal(manifest)
-	if err != nil {
-		return nil, err
-	}
-	name := manifest.Name
-	if name == nil {
-		return nil, fmt.Errorf("manifest.Name must be provided to Apply")
-	}
-	emptyResult := &v1alpha1.Manifest{}
-	obj, err := c.Fake.
-		Invokes(testing.NewRootPatchSubresourceActionWithOptions(manifestsResource, *name, types.ApplyPatchType, data, opts.ToPatchOptions(), "status"), emptyResult)
-	if obj == nil {
-		return emptyResult, err
-	}
-	return obj.(*v1alpha1.Manifest), err
 }

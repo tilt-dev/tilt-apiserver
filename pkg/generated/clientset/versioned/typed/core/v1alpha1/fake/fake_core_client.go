@@ -28,7 +28,7 @@ type FakeCoreV1alpha1 struct {
 }
 
 func (c *FakeCoreV1alpha1) Manifests() v1alpha1.ManifestInterface {
-	return &FakeManifests{c}
+	return newFakeManifests(c)
 }
 
 // RESTClient returns a RESTClient that is used to communicate

@@ -18,10 +18,10 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 
-	v1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/applyconfiguration/core/v1alpha1"
+	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	applyconfigurationcorev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/applyconfiguration/core/v1alpha1"
 	scheme "github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned/scheme"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	types "k8s.io/apimachinery/pkg/types"
@@ -37,36 +37,37 @@ type ManifestsGetter interface {
 
 // ManifestInterface has methods to work with Manifest resources.
 type ManifestInterface interface {
-	Create(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.CreateOptions) (*v1alpha1.Manifest, error)
-	Update(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (*v1alpha1.Manifest, error)
+	Create(ctx context.Context, manifest *corev1alpha1.Manifest, opts v1.CreateOptions) (*corev1alpha1.Manifest, error)
+	Update(ctx context.Context, manifest *corev1alpha1.Manifest, opts v1.UpdateOptions) (*corev1alpha1.Manifest, error)
 	// Add a +genclient:noStatus comment above the type to avoid generating UpdateStatus().
-	UpdateStatus(ctx context.Context, manifest *v1alpha1.Manifest, opts v1.UpdateOptions) (*v1alpha1.Manifest, error)
+	UpdateStatus(ctx context.Context, manifest *corev1alpha1.Manifest, opts v1.UpdateOptions) (*corev1alpha1.Manifest, error)
 	Delete(ctx context.Context, name string, opts v1.DeleteOptions) error
 	DeleteCollection(ctx context.Context, opts v1.DeleteOptions, listOpts v1.ListOptions) error
-	Get(ctx context.Context, name string, opts v1.GetOptions) (*v1alpha1.Manifest, error)
-	List(ctx context.Context, opts v1.ListOptions) (*v1alpha1.ManifestList, error)
+	Get(ctx context.Context, name string, opts v1.GetOptions) (*corev1alpha1.Manifest, error)
+	List(ctx context.Context, opts v1.ListOptions) (*corev1alpha1.ManifestList, error)
 	Watch(ctx context.Context, opts v1.ListOptions) (watch.Interface, error)
-	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *v1alpha1.Manifest, err error)
-	Apply(ctx context.Context, manifest *corev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.Manifest, err error)
+	Patch(ctx context.Context, name string, pt types.PatchType, data []byte, opts v1.PatchOptions, subresources ...string) (result *corev1alpha1.Manifest, err error)
+	Apply(ctx context.Context, manifest *applyconfigurationcorev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.Manifest, err error)
 	// Add a +genclient:noStatus comment above the type to avoid generating ApplyStatus().
-	ApplyStatus(ctx context.Context, manifest *corev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *v1alpha1.Manifest, err error)
+	ApplyStatus(ctx context.Context, manifest *applyconfigurationcorev1alpha1.ManifestApplyConfiguration, opts v1.ApplyOptions) (result *corev1alpha1.Manifest, err error)
 	ManifestExpansion
 }
 
 // manifests implements ManifestInterface
 type manifests struct {
-	*gentype.ClientWithListAndApply[*v1alpha1.Manifest, *v1alpha1.ManifestList, *corev1alpha1.ManifestApplyConfiguration]
+	*gentype.ClientWithListAndApply[*corev1alpha1.Manifest, *corev1alpha1.ManifestList, *applyconfigurationcorev1alpha1.ManifestApplyConfiguration]
 }
 
 // newManifests returns a Manifests
 func newManifests(c *CoreV1alpha1Client) *manifests {
 	return &manifests{
-		gentype.NewClientWithListAndApply[*v1alpha1.Manifest, *v1alpha1.ManifestList, *corev1alpha1.ManifestApplyConfiguration](
+		gentype.NewClientWithListAndApply[*corev1alpha1.Manifest, *corev1alpha1.ManifestList, *applyconfigurationcorev1alpha1.ManifestApplyConfiguration](
 			"manifests",
 			c.RESTClient(),
 			scheme.ParameterCodec,
 			"",
-			func() *v1alpha1.Manifest { return &v1alpha1.Manifest{} },
-			func() *v1alpha1.ManifestList { return &v1alpha1.ManifestList{} }),
+			func() *corev1alpha1.Manifest { return &corev1alpha1.Manifest{} },
+			func() *corev1alpha1.ManifestList { return &corev1alpha1.ManifestList{} },
+		),
 	}
 }
