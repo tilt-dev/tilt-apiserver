@@ -18,13 +18,13 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"context"
+	context "context"
 	time "time"
 
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	apiscorev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
 	versioned "github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned"
 	internalinterfaces "github.com/tilt-dev/tilt-apiserver/pkg/generated/informers/externalversions/internalinterfaces"
-	v1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/listers/core/v1alpha1"
+	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/generated/listers/core/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	watch "k8s.io/apimachinery/pkg/watch"
@@ -35,7 +35,7 @@ import (
 // Manifests.
 type ManifestInformer interface {
 	Informer() cache.SharedIndexInformer
-	Lister() v1alpha1.ManifestLister
+	Lister() corev1alpha1.ManifestLister
 }
 
 type manifestInformer struct {
@@ -69,7 +69,7 @@ func NewFilteredManifestInformer(client versioned.Interface, resyncPeriod time.D
 				return client.CoreV1alpha1().Manifests().Watch(context.TODO(), options)
 			},
 		},
-		&corev1alpha1.Manifest{},
+		&apiscorev1alpha1.Manifest{},
 		resyncPeriod,
 		indexers,
 	)
@@ -80,9 +80,9 @@ func (f *manifestInformer) defaultInformer(client versioned.Interface, resyncPer
 }
 
 func (f *manifestInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&corev1alpha1.Manifest{}, f.defaultInformer)
+	return f.factory.InformerFor(&apiscorev1alpha1.Manifest{}, f.defaultInformer)
 }
 
-func (f *manifestInformer) Lister() v1alpha1.ManifestLister {
-	return v1alpha1.NewManifestLister(f.Informer().GetIndexer())
+func (f *manifestInformer) Lister() corev1alpha1.ManifestLister {
+	return corev1alpha1.NewManifestLister(f.Informer().GetIndexer())
 }
