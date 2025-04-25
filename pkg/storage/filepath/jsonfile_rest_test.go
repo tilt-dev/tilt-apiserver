@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/apimachinery/pkg/watch"
 	genericapirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/generic"
@@ -313,6 +314,99 @@ func TestFilepathREST_UpdateIdentical(t *testing.T) {
 	// 2) the result of update has a truncated CreationTimestamp
 	actual := result.(*v1alpha1.Manifest)
 	require.Equal(t, "2", actual.ResourceVersion)
+}
+
+func TestFilepathREST_ParallelCreateAndWatch(t *testing.T) {
+	f := newRESTFixture(t)
+	defer f.tearDown()
+
+	// Record unique object creation events
+	created := sync.Map{}
+
+	eventRecorder := func() {
+		sendInitialEvents := true
+		w, werr := f.watcher().Watch(f.rootCtx, &metainternalversion.ListOptions{
+			Watch:             true,
+			SendInitialEvents: &sendInitialEvents,
+		})
+		require.NoError(t, werr)
+		defer w.Stop()
+
+		for {
+			select {
+			case <-f.rootCtx.Done():
+				return
+			case e, isOpen := <-w.ResultChan():
+				if !isOpen {
+					return
+				}
+				if e.Type == watch.Added {
+					created.Store(e.Object.(metav1.Object).GetName(), true)
+				}
+			}
+		}
+	}
+
+	// Spawn a bunch of workers that create objects
+	const TotalObjects = 500
+	const Workers = 20
+	const objNamePrefix = "parallel-create-and-watch-"
+	var wready, wdone sync.WaitGroup
+	wready.Add(Workers)
+	wdone.Add(Workers)
+	objCreator := f.creater()
+	start := make(chan struct{})
+
+	for i := 0; i < Workers; i++ {
+		go func(worker int) {
+			wready.Done()
+			<-start // Start all workers at the same time
+
+			objectsToCreate := TotalObjects / Workers
+
+			for j := 0; j < objectsToCreate; j++ {
+				// When the first worker is in the middle of creating their objects,
+				// start the watcher/event counter.
+				if worker == 0 && j == objectsToCreate/2 {
+					go eventRecorder()
+				}
+
+				objName := fmt.Sprintf("%s-%d-%d", objNamePrefix, worker, j)
+				obj := &v1alpha1.Manifest{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: objName,
+					},
+					Spec: v1alpha1.ManifestSpec{
+						Message: objName,
+					},
+				}
+				_, err := objCreator.Create(f.rootCtx, obj, nil, nil)
+				require.NoError(t, err)
+			}
+
+			wdone.Done()
+		}(i)
+	}
+
+	wready.Wait()
+	close(start)
+	wdone.Wait()
+
+	// Wait for all Added events for the objects we created
+	count := 0
+	waitErr := wait.PollUntilContextTimeout(f.rootCtx, 200*time.Millisecond, 10*time.Second, true, func(ctx context.Context) (bool, error) {
+		count = 0
+		created.Range(func(key, value interface{}) bool {
+			count++
+			return true
+		})
+
+		if count == TotalObjects {
+			return true, nil
+		}
+		return false, nil
+	})
+	require.NoError(t, waitErr, "Did not receive expected number of Added events (received %d, expected %d)", count, TotalObjects)
 }
 
 type restOptionsGetter struct {
