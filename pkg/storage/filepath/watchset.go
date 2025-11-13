@@ -65,8 +65,14 @@ func (w *watchNode) Start(p storage.SelectionPredicate, initEventFactory func() 
 	}
 
 	go func() {
+		// When writing to outCh, we always check stopCh too
+		// and drop events if we are stopping and the consumer is not ready.
+
 		for _, e := range initEvents {
-			w.outCh <- e
+			select {
+			case <-w.stopCh:
+			case w.outCh <- e:
+			}
 		}
 
 		for e := range w.updateCh {
@@ -79,8 +85,6 @@ func (w *watchNode) Start(p storage.SelectionPredicate, initEventFactory func() 
 				continue
 			}
 
-			// If we are stopping, don't block on sending to outCh,
-			// just drop the event if the consumer is not ready.
 			select {
 			case <-w.stopCh:
 			case w.outCh <- e:
