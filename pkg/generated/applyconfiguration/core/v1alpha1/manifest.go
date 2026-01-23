@@ -25,6 +25,8 @@ import (
 
 // ManifestApplyConfiguration represents a declarative configuration of the Manifest type for use
 // with apply.
+//
+// Manifest
 type ManifestApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
@@ -41,6 +43,7 @@ func Manifest(name string) *ManifestApplyConfiguration {
 	b.WithAPIVersion("core.tilt.dev/v1alpha1")
 	return b
 }
+
 func (b ManifestApplyConfiguration) IsApplyConfiguration() {}
 
 // WithKind sets the Kind field in the declarative configuration to the given value

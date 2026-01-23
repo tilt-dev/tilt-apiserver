@@ -12,13 +12,6 @@ import (
 	"github.com/akutz/memconn"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
-	"github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned"
-	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/options"
-	"github.com/tilt-dev/tilt-apiserver/pkg/server/testdata"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,6 +19,14 @@ import (
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/transport"
+
+	corev1alpha1 "github.com/tilt-dev/tilt-apiserver/pkg/apis/core/v1alpha1"
+	"github.com/tilt-dev/tilt-apiserver/pkg/generated/clientset/versioned"
+	tiltopenapi "github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/apiserver"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/builder"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/options"
+	"github.com/tilt-dev/tilt-apiserver/pkg/server/testdata"
 )
 
 const fakeBearerToken = "fake-bearer-token"
@@ -385,7 +386,7 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
 	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
 	assert.Contains(t, content,
-		`"x-kubernetes-group-version-kind":[{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}]`)
+		`"x-kubernetes-group-version-kind":{"group":"core.tilt.dev","version":"v1alpha1","kind":"Manifest"}`)
 	assert.NotContains(t, content, `__internal`)
 }
 

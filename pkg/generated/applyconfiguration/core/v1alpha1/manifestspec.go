@@ -19,6 +19,8 @@ package v1alpha1
 
 // ManifestSpecApplyConfiguration represents a declarative configuration of the ManifestSpec type for use
 // with apply.
+//
+// ManifestSpec defines the desired state of Manifest
 type ManifestSpecApplyConfiguration struct {
 	Message *string `json:"message,omitempty"`
 }
