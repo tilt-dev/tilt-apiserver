@@ -19,6 +19,8 @@ package v1alpha1
 
 // ManifestStatusApplyConfiguration represents a declarative configuration of the ManifestStatus type for use
 // with apply.
+//
+// ManifestStatus defines the observed state of Manifest
 type ManifestStatusApplyConfiguration struct {
 	Message *string `json:"message,omitempty"`
 }
