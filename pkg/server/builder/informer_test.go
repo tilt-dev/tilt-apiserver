@@ -46,11 +46,7 @@ func overrideFeatureGate(t *testing.T, feature clientfeatures.Feature, enabled b
 	})
 }
 
-// TestInformerWithWatchListClientDisabled verifies that an informer syncs
-// correctly when the WatchListClient feature gate is disabled. The informer
-// uses a regular List+Watch, which the tilt-apiserver storage supports.
-func TestInformerWithWatchListClientDisabled(t *testing.T) {
-	overrideFeatureGate(t, clientfeatures.WatchListClient, false)
+func testInformer(t *testing.T) {
 
 	f := newFixture(t)
 	defer f.tearDown()
@@ -82,35 +78,17 @@ func TestInformerWithWatchListClientDisabled(t *testing.T) {
 	assert.Contains(t, names, "test-manifest")
 }
 
-// TestInformerWithWatchListClientEnabled verifies that an informer fails to
-// sync within a short timeout when the WatchListClient feature gate is enabled.
-//
-// When WatchListClient is enabled, the reflector uses the WatchList protocol,
-// which sends a watch request with SendInitialEvents=true and waits for a
-// Bookmark event annotated with "k8s.io/initial-events-end". The
-// tilt-apiserver's storage layer sends initial ADDED events but never sends
-// this Bookmark, so the informer cache never syncs.
+// TestInformerWithWatchListClientDisabled verifies that an informer syncs
+// correctly when the WatchListClient feature gate is disabled. The informer
+// uses a regular List+Watch, which the tilt-apiserver storage supports.
+func TestInformerWithWatchListClientDisabled(t *testing.T) {
+	overrideFeatureGate(t, clientfeatures.WatchListClient, false)
+	testInformer(t)
+}
+
+// TestInformerWithWatchListClientEnabled verifies that an informer syncs
+// correctly even when the WatchListClient feature gate is enabled.
 func TestInformerWithWatchListClientEnabled(t *testing.T) {
 	overrideFeatureGate(t, clientfeatures.WatchListClient, true)
-
-	f := newFixture(t)
-	defer f.tearDown()
-
-	_, err := f.client.CoreV1alpha1().Manifests().Create(f.ctx, &corev1alpha1.Manifest{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-manifest"},
-	}, metav1.CreateOptions{})
-	require.NoError(t, err)
-
-	factory := informers.NewSharedInformerFactory(f.client, 0)
-	informer := factory.Core().V1alpha1().Manifests().Informer()
-
-	factory.Start(f.ctx.Done())
-
-	// Use a short timeout: the cache should not sync because the server never
-	// sends the "initial-events-end" Bookmark that the WatchList protocol requires.
-	syncCtx, syncCancel := context.WithTimeout(f.ctx, 3*time.Second)
-	defer syncCancel()
-
-	synced := cache.WaitForCacheSync(syncCtx.Done(), informer.HasSynced)
-	assert.False(t, synced, "informer cache should NOT sync when WatchListClient is enabled (server does not send the WatchList bookmark)")
+	testInformer(t)
 }
