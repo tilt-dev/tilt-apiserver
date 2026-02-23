@@ -385,6 +385,10 @@ func TestValidateOpenAPISpec(t *testing.T) {
 	content := string(contentBytes)
 	assert.Contains(t, content, `"operationId":"watchCoreTiltDevV1alpha1Manifest"`)
 	assert.NotContains(t, content, `"operationId":"watchCoreTiltDevV1alpha1ManifestStatus"`)
+	// GVK appears as a list in schema definitions (used by field managers)
+	assert.Contains(t, content,
+		`"x-kubernetes-group-version-kind":[{"group":"core.tilt.dev","kind":"Manifest","version":"v1alpha1"}]`)
+	// GVK also appears as a single object on each operation
 	assert.Contains(t, content,
 		`"x-kubernetes-group-version-kind":{"group":"core.tilt.dev","version":"v1alpha1","kind":"Manifest"}`)
 	assert.NotContains(t, content, `__internal`)
