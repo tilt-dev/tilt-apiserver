@@ -47,9 +47,10 @@ mkdir -p pkg/generated/openapi
 kube::codegen::gen_openapi \
   --output-pkg github.com/tilt-dev/tilt-apiserver/pkg/generated/openapi \
   --output-dir ./pkg/generated/openapi \
+  --output-model-name-file zz_generated.model_name.go \
   --report-filename "${SCRIPT_ROOT}"/hack/api_violations.list \
   --update-report \
-  --boilerplate "${SCRIPT_ROOT}"/hack/boilerplate.go.txt \
+  --boilerplate "${SCRIPT_ROOT}"/hack/openapi-boilerplate.go.txt \
   ./pkg/apis
 
 USER_ID=$(id -u)
