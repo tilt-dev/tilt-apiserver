@@ -33,11 +33,39 @@ import (
 )
 
 // ManifestInformer provides access to a shared informer and lister for
-// Manifests.
+// Manifests. Prefer using the type-safe variant (see [TypedManifestInformer]).
 type ManifestInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() corev1alpha1.ManifestLister
 }
+
+// TypedManifestInformer provides access to a shared informer and lister for
+// Manifests, including the type-safe TypedInformer variant.
+// It is a superset of ManifestInformer.
+type TypedManifestInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() ManifestIndexInformer
+	Lister() corev1alpha1.ManifestLister
+}
+
+// ManifestIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type ManifestIndexInformer cache.TypedSharedIndexInformer[*apiscorev1alpha1.Manifest]
+
+// ManifestHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for Manifest.
+type ManifestHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apiscorev1alpha1.Manifest]
+
+// ManifestDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for Manifest.
+type ManifestDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apiscorev1alpha1.Manifest]
+
+// ManifestFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for Manifest.
+type ManifestFilteringHandler = cache.TypedFilteringResourceEventHandler[*apiscorev1alpha1.Manifest]
+
+// ManifestIndexers is a specialization of [cache.TypedIndexers] for Manifest.
+type ManifestIndexers = cache.TypedIndexers[*apiscorev1alpha1.Manifest]
+
+// DeletedManifest is a specialization of [cache.DeletedObject] for Manifest.
+type DeletedManifest = cache.DeletedObject[*apiscorev1alpha1.Manifest]
 
 type manifestInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -47,25 +75,49 @@ type manifestInformer struct {
 // NewManifestInformer constructs a new informer for Manifest type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedManifestInformer]).
 func NewManifestInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
 	return NewManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedManifestInformer constructs a new informer for Manifest type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedManifestInformer(client versioned.Interface, resyncPeriod time.Duration, indexers ManifestIndexers) ManifestIndexInformer {
+	return NewTypedManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredManifestInformer constructs a new informer for Manifest type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredManifestInformer]).
 func NewFilteredManifestInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return NewManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+	return NewTypedManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredManifestInformer constructs a new informer for Manifest type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredManifestInformer(client versioned.Interface, resyncPeriod time.Duration, indexers ManifestIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) ManifestIndexInformer {
+	return NewTypedManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
 }
 
 // NewManifestInformerWithOptions constructs a new informer for Manifest type with additional options.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedManifestInformerWithOptions]).
 func NewManifestInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedManifestInformerWithOptions(client, options)
+}
+
+// NewTypedManifestInformerWithOptions constructs a new informer for Manifest type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedManifestInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) ManifestIndexInformer {
 	gvr := schema.GroupVersionResource{Group: "core.tilt.dev", Version: "v1alpha1", Resource: "manifests"}
 	identifier := options.InformerName.WithResource(gvr)
 	tweakListOptions := options.TweakListOptions
-	return cache.NewSharedIndexInformerWithOptions(
+	return cache.NewTypedSharedIndexInformer[*apiscorev1alpha1.Manifest](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
 			ListFunc: func(opts v1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
@@ -98,17 +150,57 @@ func NewManifestInformerWithOptions(client versioned.Interface, options internal
 			Indexers:     options.Indexers,
 			Identifier:   identifier,
 		},
-	)
+	))
 }
 
 func (f *manifestInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
+	return NewTypedManifestInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *manifestInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apiscorev1alpha1.Manifest{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *manifestInformer) TypedInformer() ManifestIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1alpha1.Manifest](f.factory.InformerFor(&apiscorev1alpha1.Manifest{}, f.defaultInformer))
 }
 
 func (f *manifestInformer) Lister() corev1alpha1.ManifestLister {
 	return corev1alpha1.NewManifestLister(f.Informer().GetIndexer())
+}
+
+// ToTypedManifestInformer converts an untyped informer into a TypedManifestInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Manifest. If that is not the case, calling type-safe methods of the returned
+// TypedManifestInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedManifestInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedManifestInformer(informer ManifestInformer) TypedManifestInformer {
+	if informer, ok := informer.(TypedManifestInformer); ok {
+		return informer
+	}
+	return &manifestTypedInformerAdapter{informer}
+}
+
+type manifestTypedInformerAdapter struct {
+	ManifestInformer
+}
+
+func (a *manifestTypedInformerAdapter) TypedInformer() ManifestIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apiscorev1alpha1.Manifest](a.Informer())
+}
+
+// ToManifestIndexInformer converts an untyped informer into a ManifestIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *Manifest. If that is not the case, calling type-safe methods of the returned
+// ManifestIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a ManifestIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToManifestIndexInformer(informer cache.SharedIndexInformer) ManifestIndexInformer {
+	if informer, ok := informer.(ManifestIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apiscorev1alpha1.Manifest](informer)
 }

@@ -24,7 +24,7 @@ import (
 // Interface provides access to all the informers in this group version.
 type Interface interface {
 	// Manifests returns a ManifestInformer.
-	Manifests() ManifestInformer
+	Manifests() TypedManifestInformer
 }
 
 type version struct {
@@ -38,7 +38,7 @@ func New(f internalinterfaces.SharedInformerFactory, namespace string, tweakList
 	return &version{factory: f, namespace: namespace, tweakListOptions: tweakListOptions}
 }
 
-// Manifests returns a ManifestInformer.
-func (v *version) Manifests() ManifestInformer {
+// Manifests returns a TypedManifestInformer.
+func (v *version) Manifests() TypedManifestInformer {
 	return &manifestInformer{factory: v.factory, tweakListOptions: v.tweakListOptions}
 }
