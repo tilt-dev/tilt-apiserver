@@ -28,7 +28,7 @@ import (
 //
 // Manifest
 type ManifestApplyConfiguration struct {
-	v1.TypeMetaApplyConfiguration    `json:",inline"`
+	v1.TypeMetaApplyConfiguration    `json:""`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`
 	Spec                             *ManifestSpecApplyConfiguration   `json:"spec,omitempty"`
 	Status                           *ManifestStatusApplyConfiguration `json:"status,omitempty"`
