@@ -86,6 +86,12 @@ func (f *filepathREST) notifyWatchers(ev watch.Event) {
 	f.watchSet.notifyWatchers(ev)
 }
 
+// lockObjectPublication serializes an object's storage mutation and watch publication.
+// It must be acquired before state-dependent storage work and released after notifying watchers.
+func (f *filepathREST) lockObjectPublication(ctx context.Context, name string) func() {
+	return f.watchSet.lockObjectPublication(f.objectFileName(ctx, name))
+}
+
 func (f *filepathREST) New() runtime.Object {
 	return f.newFunc()
 }
@@ -191,6 +197,8 @@ func (f *filepathREST) Create(
 	}
 
 	filename := f.objectFileName(ctx, accessor.GetName())
+	unlock := f.watchSet.lockObjectPublication(filename)
+	defer unlock()
 
 	if f.fs.Exists(filename) {
 		return nil, apierrors.NewAlreadyExists(f.groupResource, accessor.GetName())
@@ -220,6 +228,9 @@ func (f *filepathREST) Update(
 	forceAllowCreate bool,
 	options *metav1.UpdateOptions,
 ) (runtime.Object, bool, error) {
+	unlock := f.lockObjectPublication(ctx, name)
+	defer unlock()
+
 	var isCreate bool
 	var isDelete bool
 	// attempt to update the object, automatically retrying on storage-level conflicts
@@ -350,6 +361,9 @@ func (f *filepathREST) Delete(
 	name string,
 	deleteValidation rest.ValidateObjectFunc,
 	options *metav1.DeleteOptions) (runtime.Object, bool, error) {
+	unlock := f.lockObjectPublication(ctx, name)
+	defer unlock()
+
 	filename := f.objectFileName(ctx, name)
 	oldObj, err := f.Get(ctx, name, nil)
 	if err != nil {
