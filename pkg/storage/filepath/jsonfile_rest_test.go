@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/rand/v2"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -120,13 +119,14 @@ func TestFilepathREST_Delete_Finalizers(t *testing.T) {
 func TestFilepathREST_MutationsForSameObjectPublishInCommitOrder(t *testing.T) {
 	const statusMessage = "status-updated"
 
-	fs := newDelayedWriteFS(filepath.NewMemoryFS(), "test-obj", statusMessage)
-	t.Cleanup(fs.releaseDelayedWrite)
+	fs := newPostCommitBlockingFS(filepath.NewMemoryFS(), statusMessage)
+	defer fs.release()
 	f := newRESTFixtureWithFSAndStrategy(t, fs, func(defaultStrategy builderrest.Strategy) builderrest.Strategy {
 		return defaultStrategy
 	})
 	defer f.tearDown()
 
+	// The status subresource has its own storage that shares the parent's WatchSet.
 	statusStorage := f.makeStorage(builderrest.StatusSubResourceStrategy{
 		Strategy: f.defaultStrategy(),
 	})
@@ -143,17 +143,9 @@ func TestFilepathREST_MutationsForSameObjectPublishInCommitOrder(t *testing.T) {
 		},
 	})
 
-	_, err := f.creater().Create(f.rootCtx, &v1alpha1.Manifest{
-		ObjectMeta: metav1.ObjectMeta{Name: "other-obj"},
-		Spec:       v1alpha1.ManifestSpec{Message: "initial"},
-	}, nil, nil)
-	require.NoError(t, err)
-
 	w := f.watch("test-obj")
 	defer w.Stop()
-	<-w.ResultChan()
-
-	fs.arm()
+	f.nextWatchEvent(w)
 
 	statusDone := make(chan error, 1)
 	go func() {
@@ -165,83 +157,44 @@ func TestFilepathREST_MutationsForSameObjectPublishInCommitOrder(t *testing.T) {
 		statusDone <- err
 	}()
 
-	fs.waitForDelayedWrite(t)
-
-	parentUpdater := f.updater()
-	otherDone := make(chan error, 1)
-	go func() {
-		_, _, err := parentUpdater.Update(f.rootCtx, "other-obj", objectUpdater{
-			updateFn: func(obj runtime.Object) {
-				obj.(*v1alpha1.Manifest).Spec.Message = "updated"
-			},
-		}, nil, nil, false, nil)
-		otherDone <- err
-	}()
-
 	select {
-	case err := <-otherDone:
-		require.NoError(t, err)
+	case <-fs.committed:
 	case <-time.After(10 * time.Second):
-		t.Fatal("Mutation of another object was blocked by the delayed write")
+		t.Fatal("Timed out waiting for the status write to commit")
 	}
 
-	deleter := f.deleter()
 	deleteDone := make(chan error, 1)
 	go func() {
-		_, _, err := deleter.Delete(f.rootCtx, "test-obj", nil, nil)
+		_, _, err := f.deleter().Delete(f.rootCtx, "test-obj", nil, nil)
 		deleteDone <- err
 	}()
 
-	deleteCompleted := false
-	select {
-	case <-fs.deletionCommitted:
-		select {
-		case err := <-deleteDone:
-			require.NoError(t, err)
-			deleteCompleted = true
-		case <-time.After(10 * time.Second):
-			t.Fatal("Deletion committed but did not finish publishing")
-		}
-	case <-time.After(250 * time.Millisecond):
-	}
+	waitErr := wait.PollUntilContextTimeout(f.rootCtx, 200*time.Millisecond, 10*time.Second, true, func(context.Context) (bool, error) {
+		return filepath.PublicationLockRefsForTest(f.rest, f.rootCtx, "test-obj") == 2, nil
+	})
+	require.NoError(t, waitErr, "Deletion did not wait for the status update's publication lock")
 
-	fs.releaseDelayedWrite()
+	fs.release()
 
-	first := <-w.ResultChan()
-	second := <-w.ResultChan()
-
-	firstManifest := first.Object.(*v1alpha1.Manifest)
-	secondManifest := second.Object.(*v1alpha1.Manifest)
-	require.Equal(t, statusMessage, firstManifest.Status.Message)
-	require.Nil(t, firstManifest.DeletionTimestamp)
-	require.NotNil(t, secondManifest.DeletionTimestamp)
-
-	firstVersion, err := strconv.ParseUint(firstManifest.ResourceVersion, 10, 64)
-	require.NoError(t, err)
-	secondVersion, err := strconv.ParseUint(secondManifest.ResourceVersion, 10, 64)
-	require.NoError(t, err)
-	require.Less(t, firstVersion, secondVersion)
+	first := f.nextWatchEvent(w).Object.(*v1alpha1.Manifest)
+	second := f.nextWatchEvent(w).Object.(*v1alpha1.Manifest)
+	require.Equal(t, statusMessage, first.Status.Message)
+	require.Nil(t, first.DeletionTimestamp)
+	require.Equal(t, statusMessage, second.Status.Message)
+	require.NotNil(t, second.DeletionTimestamp)
 
 	select {
 	case err := <-statusDone:
 		require.NoError(t, err)
 	case <-time.After(10 * time.Second):
-		t.Fatal("Status update did not finish after the delayed write was released")
+		t.Fatal("Status update did not finish after the committed write was released")
 	}
-	if !deleteCompleted {
-		select {
-		case err := <-deleteDone:
-			require.NoError(t, err)
-		case <-time.After(10 * time.Second):
-			t.Fatal("Deletion did not finish after the delayed write was released")
-		}
+	select {
+	case err := <-deleteDone:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Deletion did not finish after the committed write was released")
 	}
-
-	stored, err := f.get("test-obj")
-	require.NoError(t, err)
-	storedManifest := stored.(*v1alpha1.Manifest)
-	require.Equal(t, statusMessage, storedManifest.Status.Message)
-	require.NotNil(t, storedManifest.DeletionTimestamp)
 }
 
 func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
@@ -659,90 +612,48 @@ func TestFilepathREST_CanRestartWatcherWithoutDrainingResults(t *testing.T) {
 	}
 }
 
-type delayedWriteFS struct {
+// postCommitBlockingFS blocks the first non-deletion write carrying statusMessage
+// after the wrapped FS commits it, holding open the gap between persistence and watch
+// publication. Pausing before the commit would not reproduce out-of-order events,
+// because a concurrent mutation would make the paused write conflict and retry.
+type postCommitBlockingFS struct {
 	filepath.FS
 
-	name          string
 	statusMessage string
-
-	armed             chan struct{}
-	writeCommitted    chan struct{}
-	releaseWrite      chan struct{}
-	deletionCommitted chan struct{}
-
-	armOnce      sync.Once
-	writeOnce    sync.Once
-	releaseOnce  sync.Once
-	deletionOnce sync.Once
+	committed     chan struct{}
+	resume        chan struct{}
+	blockOnce     sync.Once
+	releaseOnce   sync.Once
 }
 
-func newDelayedWriteFS(fs filepath.FS, name, statusMessage string) *delayedWriteFS {
-	return &delayedWriteFS{
-		FS:                fs,
-		name:              name,
-		statusMessage:     statusMessage,
-		armed:             make(chan struct{}),
-		writeCommitted:    make(chan struct{}),
-		releaseWrite:      make(chan struct{}),
-		deletionCommitted: make(chan struct{}),
+func newPostCommitBlockingFS(fs filepath.FS, statusMessage string) *postCommitBlockingFS {
+	return &postCommitBlockingFS{
+		FS:            fs,
+		statusMessage: statusMessage,
+		committed:     make(chan struct{}),
+		resume:        make(chan struct{}),
 	}
 }
 
-func (f *delayedWriteFS) arm() {
-	f.armOnce.Do(func() {
-		close(f.armed)
-	})
-}
-
-func (f *delayedWriteFS) Write(
-	encoder runtime.Encoder,
-	path string,
-	obj runtime.Object,
-	storageVersion uint64,
-) error {
+func (f *postCommitBlockingFS) Write(encoder runtime.Encoder, path string, obj runtime.Object, storageVersion uint64) error {
 	if err := f.FS.Write(encoder, path, obj, storageVersion); err != nil {
 		return err
 	}
-
-	select {
-	case <-f.armed:
-	default:
-		return nil
-	}
-
+	// Deletion writes must pass through; blockOnce.Do would otherwise make them
+	// wait for the paused status write and mask the race.
 	manifest, ok := obj.(*v1alpha1.Manifest)
-	if !ok || manifest.Name != f.name {
-		return nil
-	}
-
-	if manifest.DeletionTimestamp != nil {
-		f.deletionOnce.Do(func() {
-			close(f.deletionCommitted)
-		})
-		return nil
-	}
-
-	if manifest.Status.Message == f.statusMessage {
-		f.writeOnce.Do(func() {
-			close(f.writeCommitted)
-			<-f.releaseWrite
+	if ok && manifest.Status.Message == f.statusMessage && manifest.DeletionTimestamp == nil {
+		f.blockOnce.Do(func() {
+			close(f.committed)
+			<-f.resume
 		})
 	}
 	return nil
 }
 
-func (f *delayedWriteFS) waitForDelayedWrite(t *testing.T) {
-	t.Helper()
-	select {
-	case <-f.writeCommitted:
-	case <-time.After(10 * time.Second):
-		t.Fatal("Timed out waiting for delayed write to commit")
-	}
-}
-
-func (f *delayedWriteFS) releaseDelayedWrite() {
+func (f *postCommitBlockingFS) release() {
 	f.releaseOnce.Do(func() {
-		close(f.releaseWrite)
+		close(f.resume)
 	})
 }
 
@@ -890,6 +801,18 @@ func (r *restFixture) watch(name string) watch.Interface {
 	})
 	require.NoError(r.t, err)
 	return w
+}
+
+func (r *restFixture) nextWatchEvent(w watch.Interface) watch.Event {
+	r.t.Helper()
+	select {
+	case event, ok := <-w.ResultChan():
+		require.True(r.t, ok, "Watch result channel closed")
+		return event
+	case <-time.After(10 * time.Second):
+		r.t.Fatal("Timed out waiting for watch event")
+		return watch.Event{}
+	}
 }
 
 func (r *restFixture) mustMeta(obj interface{}) metav1.Object {

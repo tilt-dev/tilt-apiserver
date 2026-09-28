@@ -196,10 +196,10 @@ func (f *filepathREST) Create(
 		}
 	}
 
-	filename := f.objectFileName(ctx, accessor.GetName())
-	unlock := f.watchSet.lockObjectPublication(filename)
+	unlock := f.lockObjectPublication(ctx, accessor.GetName())
 	defer unlock()
 
+	filename := f.objectFileName(ctx, accessor.GetName())
 	if f.fs.Exists(filename) {
 		return nil, apierrors.NewAlreadyExists(f.groupResource, accessor.GetName())
 	}

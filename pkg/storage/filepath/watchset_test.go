@@ -1,10 +1,12 @@
 package filepath
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/util/wait"
 )
 
 func TestWatchSetSerializesPublicationForMatchingKeys(t *testing.T) {
@@ -23,13 +25,14 @@ func TestWatchSetSerializesPublicationForMatchingKeys(t *testing.T) {
 		secondAcquired <- watchSet.lockObjectPublication("second")
 	}()
 
-	require.Eventually(t, func() bool {
+	waitErr := wait.PollUntilContextTimeout(context.Background(), 200*time.Millisecond, 10*time.Second, true, func(context.Context) (bool, error) {
 		locks.mu.Lock()
 		defer locks.mu.Unlock()
 		first := locks.entries["first"]
 		second := locks.entries["second"]
-		return first != nil && first.refs == 2 && second != nil && second.refs == 1
-	}, 10*time.Second, time.Millisecond)
+		return first != nil && first.refs == 2 && second != nil && second.refs == 1, nil
+	})
+	require.NoError(t, waitErr, "Publication locks were not acquired")
 
 	select {
 	case unlockSecond := <-secondAcquired:
