@@ -116,6 +116,87 @@ func TestFilepathREST_Delete_Finalizers(t *testing.T) {
 	f.mustNotExist("test-obj")
 }
 
+func TestFilepathREST_MutationsForSameObjectPublishInCommitOrder(t *testing.T) {
+	const statusMessage = "status-updated"
+
+	fs := newPostCommitBlockingFS(filepath.NewMemoryFS(), statusMessage)
+	defer fs.release()
+	f := newRESTFixtureWithFSAndStrategy(t, fs, func(defaultStrategy builderrest.Strategy) builderrest.Strategy {
+		return defaultStrategy
+	})
+	defer f.tearDown()
+
+	// The status subresource has its own storage that shares the parent's WatchSet.
+	statusStorage := f.makeStorage(builderrest.StatusSubResourceStrategy{
+		Strategy: f.defaultStrategy(),
+	})
+	statusUpdater, ok := statusStorage.(rest.Updater)
+	require.True(t, ok, "Status storage is not a rest.Updater")
+
+	f.mustCreate(&v1alpha1.Manifest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test-obj",
+			Finalizers: []string{"test.tilt.dev"},
+		},
+		Status: v1alpha1.ManifestStatus{
+			Message: "initial",
+		},
+	})
+
+	w := f.watch("test-obj")
+	defer w.Stop()
+	f.nextWatchEvent(w)
+
+	statusDone := make(chan error, 1)
+	go func() {
+		_, _, err := statusUpdater.Update(f.rootCtx, "test-obj", objectUpdater{
+			updateFn: func(obj runtime.Object) {
+				obj.(*v1alpha1.Manifest).Status.Message = statusMessage
+			},
+		}, nil, nil, false, nil)
+		statusDone <- err
+	}()
+
+	select {
+	case <-fs.committed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Timed out waiting for the status write to commit")
+	}
+
+	deleteDone := make(chan error, 1)
+	go func() {
+		_, _, err := f.deleter().Delete(f.rootCtx, "test-obj", nil, nil)
+		deleteDone <- err
+	}()
+
+	waitErr := wait.PollUntilContextTimeout(f.rootCtx, 200*time.Millisecond, 10*time.Second, true, func(context.Context) (bool, error) {
+		return filepath.PublicationLockRefsForTest(f.rest, f.rootCtx, "test-obj") == 2, nil
+	})
+	require.NoError(t, waitErr, "Deletion did not wait for the status update's publication lock")
+
+	fs.release()
+
+	first := f.nextWatchEvent(w).Object.(*v1alpha1.Manifest)
+	second := f.nextWatchEvent(w).Object.(*v1alpha1.Manifest)
+	require.Equal(t, statusMessage, first.Status.Message)
+	require.Nil(t, first.DeletionTimestamp)
+	require.Equal(t, statusMessage, second.Status.Message)
+	require.NotNil(t, second.DeletionTimestamp)
+
+	select {
+	case err := <-statusDone:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Status update did not finish after the committed write was released")
+	}
+	select {
+	case err := <-deleteDone:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Deletion did not finish after the committed write was released")
+	}
+}
+
 func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
 	f := newRESTFixture(t)
 	defer f.tearDown()
@@ -531,6 +612,51 @@ func TestFilepathREST_CanRestartWatcherWithoutDrainingResults(t *testing.T) {
 	}
 }
 
+// postCommitBlockingFS blocks the first non-deletion write carrying statusMessage
+// after the wrapped FS commits it, holding open the gap between persistence and watch
+// publication. Pausing before the commit would not reproduce out-of-order events,
+// because a concurrent mutation would make the paused write conflict and retry.
+type postCommitBlockingFS struct {
+	filepath.FS
+
+	statusMessage string
+	committed     chan struct{}
+	resume        chan struct{}
+	blockOnce     sync.Once
+	releaseOnce   sync.Once
+}
+
+func newPostCommitBlockingFS(fs filepath.FS, statusMessage string) *postCommitBlockingFS {
+	return &postCommitBlockingFS{
+		FS:            fs,
+		statusMessage: statusMessage,
+		committed:     make(chan struct{}),
+		resume:        make(chan struct{}),
+	}
+}
+
+func (f *postCommitBlockingFS) Write(encoder runtime.Encoder, path string, obj runtime.Object, storageVersion uint64) error {
+	if err := f.FS.Write(encoder, path, obj, storageVersion); err != nil {
+		return err
+	}
+	// Deletion writes must pass through; blockOnce.Do would otherwise make them
+	// wait for the paused status write and mask the race.
+	manifest, ok := obj.(*v1alpha1.Manifest)
+	if ok && manifest.Status.Message == f.statusMessage && manifest.DeletionTimestamp == nil {
+		f.blockOnce.Do(func() {
+			close(f.committed)
+			<-f.resume
+		})
+	}
+	return nil
+}
+
+func (f *postCommitBlockingFS) release() {
+	f.releaseOnce.Do(func() {
+		close(f.resume)
+	})
+}
+
 type restOptionsGetter struct {
 	codec runtime.Codec
 }
@@ -547,10 +673,15 @@ func (r restOptionsGetter) GetRESTOptions(resource schema.GroupResource, obj run
 }
 
 type restFixture struct {
-	t       *testing.T
-	rest    rest.Storage
-	rootCtx context.Context
-	cancel  context.CancelFunc
+	t        *testing.T
+	rest     rest.Storage
+	rootCtx  context.Context
+	cancel   context.CancelFunc
+	dir      string
+	fs       filepath.FS
+	watchSet *filepath.WatchSet
+	scheme   *runtime.Scheme
+	opts     *restOptionsGetter
 }
 
 func newRESTFixture(t *testing.T) *restFixture {
@@ -563,9 +694,12 @@ func newRESTFixture(t *testing.T) *restFixture {
 func newRESTFixtureWithStrategy(t *testing.T,
 	strategyFn func(defaultStrategy builderrest.Strategy) builderrest.Strategy) *restFixture {
 	t.Helper()
+	return newRESTFixtureWithFSAndStrategy(t, filepath.NewMemoryFS(), strategyFn)
+}
 
-	fs := filepath.NewMemoryFS()
-	ws := filepath.NewWatchSet()
+func newRESTFixtureWithFSAndStrategy(t *testing.T, fs filepath.FS,
+	strategyFn func(defaultStrategy builderrest.Strategy) builderrest.Strategy) *restFixture {
+	t.Helper()
 
 	dir, err := ioutil.TempDir("", strings.Replace(t.Name(), "/", "_", -1))
 	require.NoError(t, err)
@@ -574,30 +708,44 @@ func newRESTFixtureWithStrategy(t *testing.T,
 	err = v1alpha1.AddToScheme(scheme)
 	require.NoError(t, err)
 
-	obj := v1alpha1.Manifest{}
-	defaultStrategy := builderrest.DefaultStrategy{ObjectTyper: scheme, Object: &obj}
-
-	sp := filepath.NewJSONFilepathStorageProvider(
-		&obj,
-		dir,
-		fs,
-		ws,
-		strategyFn(defaultStrategy))
-
 	codec := serializer.NewCodecFactory(scheme).LegacyCodec(v1alpha1.SchemeGroupVersion)
 	opts := &restOptionsGetter{codec: codec}
 
 	rootCtx, cancel := context.WithCancel(context.Background())
 	rootCtx = genericapirequest.WithNamespace(rootCtx, metav1.NamespaceNone)
 
-	storage, err := sp(scheme, opts)
-	require.NoError(t, err, "Failed to create storage provider for test setup")
-	return &restFixture{
-		t:       t,
-		rootCtx: rootCtx,
-		cancel:  cancel,
-		rest:    storage,
+	f := &restFixture{
+		t:        t,
+		rootCtx:  rootCtx,
+		cancel:   cancel,
+		dir:      dir,
+		fs:       fs,
+		watchSet: filepath.NewWatchSet(),
+		scheme:   scheme,
+		opts:     opts,
 	}
+	f.rest = f.makeStorage(strategyFn(f.defaultStrategy()))
+	return f
+}
+
+func (r *restFixture) defaultStrategy() builderrest.Strategy {
+	return builderrest.DefaultStrategy{
+		ObjectTyper: r.scheme,
+		Object:      &v1alpha1.Manifest{},
+	}
+}
+
+func (r *restFixture) makeStorage(strategy builderrest.Strategy) rest.Storage {
+	r.t.Helper()
+	sp := filepath.NewJSONFilepathStorageProvider(
+		&v1alpha1.Manifest{},
+		r.dir,
+		r.fs,
+		r.watchSet,
+		strategy)
+	storage, err := sp(r.scheme, r.opts)
+	require.NoError(r.t, err, "Failed to create storage provider for test setup")
+	return storage
 }
 
 func (r *restFixture) tearDown() {
@@ -653,6 +801,18 @@ func (r *restFixture) watch(name string) watch.Interface {
 	})
 	require.NoError(r.t, err)
 	return w
+}
+
+func (r *restFixture) nextWatchEvent(w watch.Interface) watch.Event {
+	r.t.Helper()
+	select {
+	case event, ok := <-w.ResultChan():
+		require.True(r.t, ok, "Watch result channel closed")
+		return event
+	case <-time.After(10 * time.Second):
+		r.t.Fatal("Timed out waiting for watch event")
+		return watch.Event{}
+	}
 }
 
 func (r *restFixture) mustMeta(obj interface{}) metav1.Object {

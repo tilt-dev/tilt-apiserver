@@ -9,9 +9,10 @@ import (
 
 // Keeps track of which watches need to be notified
 type WatchSet struct {
-	mu      sync.RWMutex
-	nodes   map[int]*watchNode
-	counter int
+	mu               sync.RWMutex
+	nodes            map[int]*watchNode
+	counter          int
+	publicationLocks keyedMutex
 }
 
 func NewWatchSet() *WatchSet {
@@ -43,6 +44,46 @@ func (s *WatchSet) notifyWatchers(ev watch.Event) {
 		w.updateCh <- ev
 	}
 	s.mu.RUnlock()
+}
+
+func (s *WatchSet) lockObjectPublication(key string) func() {
+	return s.publicationLocks.lock(key)
+}
+
+type keyedMutex struct {
+	mu      sync.Mutex
+	entries map[string]*keyedMutexEntry
+}
+
+type keyedMutexEntry struct {
+	mu   sync.Mutex
+	refs int
+}
+
+func (m *keyedMutex) lock(key string) func() {
+	m.mu.Lock()
+	if m.entries == nil {
+		m.entries = make(map[string]*keyedMutexEntry)
+	}
+	entry := m.entries[key]
+	if entry == nil {
+		entry = &keyedMutexEntry{}
+		m.entries[key] = entry
+	}
+	entry.refs++
+	m.mu.Unlock()
+
+	entry.mu.Lock()
+	return func() {
+		entry.mu.Unlock()
+
+		m.mu.Lock()
+		entry.refs--
+		if entry.refs == 0 {
+			delete(m.entries, key)
+		}
+		m.mu.Unlock()
+	}
 }
 
 type watchNode struct {
