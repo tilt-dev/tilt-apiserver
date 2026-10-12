@@ -13,6 +13,7 @@ import (
 func (a *Server) WithResourceFileStorage(obj resource.Object, path string) *Server {
 	fs := filepath.NewRealFS()
 	ws := filepath.NewWatchSet()
+	a.watchSets = append(a.watchSets, ws)
 	strategy := rest.DefaultStrategy{
 		Object:      obj,
 		ObjectTyper: a.apiScheme,
@@ -29,6 +30,7 @@ func (a *Server) WithResourceMemoryStorage(obj resource.Object, path string) *Se
 		a.memoryFS = filepath.NewMemoryFS()
 	}
 	ws := filepath.NewWatchSet()
+	a.watchSets = append(a.watchSets, ws)
 	strategy := rest.DefaultStrategy{
 		Object:      obj,
 		ObjectTyper: a.apiScheme,

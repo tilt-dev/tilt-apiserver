@@ -257,6 +257,80 @@ func TestWatchLotsOfServers(t *testing.T) {
 	}
 }
 
+func TestConfiguredWatchBufferClosesStalledWatchAndAllowsRestart(t *testing.T) {
+	for _, storageKind := range []string{"file", "memory"} {
+		t.Run(storageKind, func(t *testing.T) {
+			b := builder.NewServerBuilder()
+			if storageKind == "file" {
+				b.WithResourceFileStorage(&corev1alpha1.Manifest{}, t.TempDir())
+			} else {
+				b.WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data")
+			}
+			f := newFixtureWithBuilder(t, b.WithWatchBufferSize(1))
+			defer f.tearDown()
+			client := f.client.CoreV1alpha1().Manifests()
+			obj, err := client.Create(f.ctx, &corev1alpha1.Manifest{
+				ObjectMeta: metav1.ObjectMeta{Name: "my-server"},
+			}, metav1.CreateOptions{})
+			require.NoError(t, err)
+			w, err := client.Watch(f.ctx, metav1.ListOptions{})
+			require.NoError(t, err)
+			defer w.Stop()
+			f.nextResult(w)
+
+			// Large events make the unread client fall behind despite transport buffering.
+			message := strings.Repeat("x", 1<<20)
+			for i := 0; i < 20; i++ {
+				obj.Status.Message = message + fmt.Sprint(i)
+				ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
+				obj, err = client.UpdateStatus(ctx, obj, metav1.UpdateOptions{})
+				cancel()
+				require.NoError(t, err)
+			}
+
+			watchClosed := false
+			// Bound the wait, not the watch lifetime, so timeout cannot masquerade as eviction.
+			ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
+			defer cancel()
+			for !watchClosed {
+				select {
+				case _, ok := <-w.ResultChan():
+					watchClosed = !ok
+				case <-ctx.Done():
+					t.Fatal("Slow watch was not terminated")
+				}
+			}
+			restarted, err := client.Watch(f.ctx, metav1.ListOptions{})
+			require.NoError(t, err)
+			defer restarted.Stop()
+			require.Equal(t, obj.Status.Message, f.nextResult(restarted).Status.Message)
+		})
+	}
+}
+
+func TestWatchBufferSizeRejectsNonpositiveCapacity(t *testing.T) {
+	for _, capacity := range []int{0, -1} {
+		t.Run(fmt.Sprint(capacity), func(t *testing.T) {
+			b := builder.NewServerBuilder().
+				WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
+				WithWatchBufferSize(capacity)
+			_, err := b.ToServerOptions()
+			require.ErrorContains(t, err, "watch buffer size must be positive")
+			_, err = b.ToServerCommand()
+			require.ErrorContains(t, err, "watch buffer size must be positive")
+		})
+	}
+}
+
+func TestWatchBufferSizeAcceptsFinalValidSetting(t *testing.T) {
+	b := builder.NewServerBuilder().
+		WithWatchBufferSize(0).
+		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
+		WithWatchBufferSize(7)
+	_, err := b.ToServerOptions()
+	require.NoError(t, err)
+}
+
 func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {
 	f := newFixture(t)
 	defer f.tearDown()
@@ -450,14 +524,18 @@ type fixture struct {
 }
 
 func newFixture(t *testing.T) *fixture {
+	return newFixtureWithBuilder(t, builder.NewServerBuilder().
+		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data"))
+}
+
+func newFixtureWithBuilder(t *testing.T, b *builder.Server) *fixture {
 	connProvider := memConnProvider()
-	builder := builder.NewServerBuilder().
-		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
+	b.
 		WithOpenAPIDefinitions("tilt", "0.1.0", tiltopenapi.GetOpenAPIDefinitions).
 		WithConnProvider(connProvider).
 		WithBearerToken(fakeBearerToken).
 		WithCertKey(testdata.CertKey())
-	options, err := builder.ToServerOptions()
+	options, err := b.ToServerOptions()
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())

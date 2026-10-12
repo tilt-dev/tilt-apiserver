@@ -561,7 +561,7 @@ func getListPrt(listObj runtime.Object) (reflect.Value, error) {
 
 func (f *filepathREST) Watch(ctx context.Context, options *metainternalversion.ListOptions) (watch.Interface, error) {
 	p := newSelectionPredicate(options)
-	jw := f.watchSet.newWatch()
+	jw := f.watchSet.newWatch(ctx)
 
 	getInitEvents := func() ([]watch.Event, error) {
 		// On initial watch, send all the existing objects.

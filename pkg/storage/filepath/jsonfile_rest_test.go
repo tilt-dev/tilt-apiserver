@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -195,6 +196,52 @@ func TestFilepathREST_MutationsForSameObjectPublishInCommitOrder(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Deletion did not finish after the committed write was released")
 	}
+}
+
+func TestFilepathREST_StalledWatchDoesNotBlockMutationsOrSiblingStop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newRESTFixture(t)
+		defer f.tearDown()
+		f.mustCreate(&v1alpha1.Manifest{ObjectMeta: metav1.ObjectMeta{Name: "test-obj"}})
+
+		slow := f.watch("test-obj")
+		defer slow.Stop()
+		sibling := f.watch("test-obj")
+		defer sibling.Stop()
+		f.nextWatchEvent(sibling)
+
+		for i := range 5 {
+			f.mustUpdate("test-obj", func(obj runtime.Object) {
+				obj.(*v1alpha1.Manifest).Spec.Message = fmt.Sprint(i)
+			})
+			require.Equal(t, fmt.Sprint(i), f.nextWatchEvent(sibling).Object.(*v1alpha1.Manifest).Spec.Message)
+		}
+		sibling.Stop()
+		synctest.Wait()
+		f.waitForWatchClose(sibling)
+
+		const updateCount = 2 * filepath.DefaultWatchBufferSize
+		for i := range updateCount {
+			f.mustUpdate("test-obj", func(obj runtime.Object) {
+				obj.(*v1alpha1.Manifest).Spec.Message = fmt.Sprint(i)
+			})
+		}
+		synctest.Wait()
+		f.waitForWatchClose(slow)
+
+		_, err := f.creater().Create(f.rootCtx, &v1alpha1.Manifest{
+			ObjectMeta: metav1.ObjectMeta{Name: "unrelated"},
+		}, nil, nil)
+		require.NoError(t, err)
+		restarted := f.watch("test-obj")
+		defer restarted.Stop()
+		require.Equal(t, fmt.Sprint(updateCount-1), f.nextWatchEvent(restarted).Object.(*v1alpha1.Manifest).Spec.Message)
+
+		_, deleted, err := f.deleter().Delete(f.rootCtx, "test-obj", nil, nil)
+		require.NoError(t, err)
+		require.True(t, deleted)
+		require.Equal(t, watch.Deleted, f.nextWatchEvent(restarted).Type)
+	})
 }
 
 func TestFilepathREST_Update_OptimisticConcurrency(t *testing.T) {
@@ -812,6 +859,22 @@ func (r *restFixture) nextWatchEvent(w watch.Interface) watch.Event {
 	case <-time.After(10 * time.Second):
 		r.t.Fatal("Timed out waiting for watch event")
 		return watch.Event{}
+	}
+}
+
+func (r *restFixture) waitForWatchClose(w watch.Interface) {
+	r.t.Helper()
+	ctx, cancel := r.ctx()
+	defer cancel()
+	for {
+		select {
+		case _, open := <-w.ResultChan():
+			if !open {
+				return
+			}
+		case <-ctx.Done():
+			r.t.Fatal("Timed out waiting for watch to close")
+		}
 	}
 }
 
