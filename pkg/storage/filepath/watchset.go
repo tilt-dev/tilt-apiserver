@@ -2,7 +2,6 @@ package filepath
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"k8s.io/apimachinery/pkg/watch"
@@ -10,8 +9,8 @@ import (
 	"k8s.io/klog/v2"
 )
 
-// DefaultWatchBufferSize is the default number of pending live events per watcher.
-const DefaultWatchBufferSize = 100
+// defaultWatchBufferSize is the default number of pending live events per watcher.
+const defaultWatchBufferSize = 100
 
 // Keeps track of which watches need to be notified
 type WatchSet struct {
@@ -25,23 +24,8 @@ type WatchSet struct {
 func NewWatchSet() *WatchSet {
 	return &WatchSet{
 		nodes:      make(map[int]*watchNode, 10),
-		bufferSize: DefaultWatchBufferSize,
+		bufferSize: defaultWatchBufferSize,
 	}
-}
-
-// SetBufferSize configures a positive per-watcher capacity before the first watch
-// is created. Once watching begins, only the existing value may be set again.
-func (s *WatchSet) SetBufferSize(bufferSize int) error {
-	if bufferSize <= 0 {
-		return fmt.Errorf("watch buffer size must be positive: %d", bufferSize)
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.counter != 0 && s.bufferSize != bufferSize {
-		return fmt.Errorf("watch buffer size cannot change after a watch has been created")
-	}
-	s.bufferSize = bufferSize
-	return nil
 }
 
 // Creates a new watch with a unique id, but
@@ -63,30 +47,28 @@ func (s *WatchSet) newWatch(ctx context.Context) *watchNode {
 	}
 }
 
+// Publishes an event to every watch that selects it,
+// detaching any watch that can't accept any more events.
 func (s *WatchSet) notifyWatchers(ev watch.Event) {
-	for _, w := range s.enqueueWatchers(ev) {
+	var evicted []*watchNode
+
+	s.mu.Lock()
+	for id, w := range s.nodes {
+		if !w.enqueue(ev) {
+			delete(s.nodes, id)
+			evicted = append(evicted, w)
+		}
+	}
+	s.mu.Unlock()
+
+	// Stop the evicted watches outside the lock, because Stop() takes it.
+	for _, w := range evicted {
 		active := w.ctx.Err() == nil
 		w.cancel()
 		if active {
 			klog.InfoS("Terminating filepath watch because its event buffer is full", "watcher", w.id, "capacity", cap(w.updateCh))
 		}
 	}
-}
-
-// enqueueWatchers attempts delivery to every watcher and detaches failed ones.
-// It returns them for cancellation outside the registry lock, after all enqueue attempts.
-func (s *WatchSet) enqueueWatchers(ev watch.Event) []*watchNode {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	var failed []*watchNode
-	for id, w := range s.nodes {
-		if !w.enqueue(ev) {
-			delete(s.nodes, id)
-			failed = append(failed, w)
-		}
-	}
-	return failed
 }
 
 func (s *WatchSet) lockObjectPublication(key string) func() {
@@ -130,7 +112,6 @@ func (m *keyedMutex) lock(key string) func() {
 }
 
 type watchNode struct {
-	mu       sync.Mutex
 	s        *WatchSet
 	p        storage.SelectionPredicate
 	id       int
@@ -157,10 +138,13 @@ func (w *watchNode) Start(p storage.SelectionPredicate, initEventFactory func() 
 	return nil
 }
 
-// enqueue reports whether the watcher is still registered for delivery.
+// Hands an event to this watch's delivery goroutine.
+//
+// Returns false if the watch is too far behind and needs to be killed.
+//
+// Must not block: the caller is the goroutine performing the storage mutation,
+// and it holds the registry lock.
 func (w *watchNode) enqueue(ev watch.Event) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	if w.ctx.Err() != nil {
 		return false
 	}
@@ -173,13 +157,16 @@ func (w *watchNode) enqueue(ev watch.Event) bool {
 		return true
 	}
 
-	if len(w.updateCh) == cap(w.updateCh) {
+	// Each watch needs its own copy.
+	copied := *ev.DeepCopy()
+
+	// if the update channel is full, the watch is too far behind.
+	select {
+	case w.updateCh <- copied:
+		return true
+	default:
 		return false
 	}
-	// Writers hold mu, and the reader can only free space while we copy.
-	// Encoders mutate TypeMeta, so each watcher must own its event object.
-	w.updateCh <- *ev.DeepCopy()
-	return true
 }
 
 func (w *watchNode) run(initEvents []watch.Event) {
@@ -218,8 +205,9 @@ func (w *watchNode) send(e watch.Event) bool {
 }
 
 func (w *watchNode) Stop() {
-	w.mu.Lock()
 	w.cancel()
+
+	// Drain the events that we're not going to send.
 drain:
 	for {
 		select {
@@ -228,7 +216,6 @@ drain:
 			break drain
 		}
 	}
-	w.mu.Unlock()
 
 	w.s.mu.Lock()
 	defer w.s.mu.Unlock()

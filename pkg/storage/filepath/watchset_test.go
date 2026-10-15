@@ -18,59 +18,33 @@ import (
 	"k8s.io/apiserver/pkg/storage"
 )
 
-func TestWatchSetAcceptsConfiguredBacklogAndClosesOnOverflow(t *testing.T) {
-	for _, capacity := range []int{1, 7, DefaultWatchBufferSize, 256} {
-		t.Run(strconv.Itoa(capacity), func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) {
-				s := NewWatchSet()
-				require.NoError(t, s.SetBufferSize(capacity))
-				w := startTestWatch(t, s, newSelectionPredicate(nil), []watch.Event{watchSetEvent(0), watchSetEvent(1)})
-				synctest.Wait()
+func TestWatchSetAcceptsFullBacklogAndClosesOnOverflow(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		s := NewWatchSet()
+		w := startTestWatch(t, s, newSelectionPredicate(nil), []watch.Event{watchSetEvent(0), watchSetEvent(1)})
+		synctest.Wait()
 
-				for i := range capacity {
-					s.notifyWatchers(watchSetEvent(i + 2))
-				}
-				for i := range capacity + 2 {
-					require.Equal(t, watchSetEvent(i), nextWatchSetEvent(t, w))
-				}
-				next := watchSetEvent(capacity + 2)
-				s.notifyWatchers(next)
-				require.Equal(t, next, nextWatchSetEvent(t, w))
-				w.Stop()
+		// A full backlog is not by itself a problem; it drains in order.
+		for i := range defaultWatchBufferSize {
+			s.notifyWatchers(watchSetEvent(i + 2))
+		}
+		for i := range defaultWatchBufferSize + 2 {
+			require.Equal(t, watchSetEvent(i), nextWatchSetEvent(t, w))
+		}
+		next := watchSetEvent(defaultWatchBufferSize + 2)
+		s.notifyWatchers(next)
+		require.Equal(t, next, nextWatchSetEvent(t, w))
+		w.Stop()
 
-				w = startTestWatch(t, s, newSelectionPredicate(nil), []watch.Event{watchSetEvent(0), watchSetEvent(1)})
-				synctest.Wait()
-				for i := range capacity + 1 {
-					s.notifyWatchers(watchSetEvent(i + 2))
-				}
-				synctest.Wait()
-				waitForWatchSetClose(t, w)
-			})
-		})
-	}
-}
-
-func TestWatchSetRejectsNonpositiveBufferSize(t *testing.T) {
-	for _, capacity := range []int{0, -1} {
-		t.Run(strconv.Itoa(capacity), func(t *testing.T) {
-			s := NewWatchSet()
-			require.ErrorContains(t, s.SetBufferSize(capacity), "watch buffer size must be positive")
-			w := startTestWatch(t, s, newSelectionPredicate(nil), nil)
-			ev := watchSetEvent(0)
-			s.notifyWatchers(ev)
-			require.Equal(t, ev, nextWatchSetEvent(t, w))
-		})
-	}
-}
-
-func TestWatchSetRejectsCapacityChangesAfterWatchCreation(t *testing.T) {
-	s := NewWatchSet()
-	require.NoError(t, s.SetBufferSize(7))
-	w := startTestWatch(t, s, newSelectionPredicate(nil), nil)
-	require.NoError(t, s.SetBufferSize(7))
-	require.ErrorContains(t, s.SetBufferSize(8), "cannot change after a watch has been created")
-	w.Stop()
-	require.ErrorContains(t, s.SetBufferSize(8), "cannot change after a watch has been created")
+		// One event past the backlog, with nobody reading, closes the watch.
+		w = startTestWatch(t, s, newSelectionPredicate(nil), []watch.Event{watchSetEvent(0), watchSetEvent(1)})
+		synctest.Wait()
+		for i := range defaultWatchBufferSize + 1 {
+			s.notifyWatchers(watchSetEvent(i + 2))
+		}
+		synctest.Wait()
+		waitForWatchSetClose(t, w)
+	})
 }
 
 func TestWatchSetEventsAreIndependentOfProducerAndOtherWatchers(t *testing.T) {
@@ -158,7 +132,7 @@ func TestWatchSetDeliversInitialAndLiveEventsInFIFOOrder(t *testing.T) {
 		synctest.Wait()
 
 		events := append([]watch.Event{}, initial...)
-		for i := range DefaultWatchBufferSize {
+		for i := range defaultWatchBufferSize {
 			ev := watchSetEvent(i + 2)
 			ev.Type = []watch.EventType{watch.Added, watch.Modified, watch.Deleted}[i%3]
 			events = append(events, ev)
@@ -168,7 +142,7 @@ func TestWatchSetDeliversInitialAndLiveEventsInFIFOOrder(t *testing.T) {
 			require.Equal(t, expected, nextWatchSetEvent(t, w))
 		}
 
-		ev := watchSetEvent(DefaultWatchBufferSize + 2)
+		ev := watchSetEvent(defaultWatchBufferSize + 2)
 		s.notifyWatchers(ev)
 		require.Equal(t, ev, nextWatchSetEvent(t, w))
 	})
@@ -181,12 +155,12 @@ func TestWatchSetClosesOverflowingWatchWithoutInterruptingHealthyWatch(t *testin
 		healthy := startTestWatch(t, s, newSelectionPredicate(nil), nil)
 		synctest.Wait()
 
-		for i := range DefaultWatchBufferSize {
+		for i := range defaultWatchBufferSize {
 			ev := watchSetEvent(i + 2)
 			s.notifyWatchers(ev)
 			require.Equal(t, ev, nextWatchSetEvent(t, healthy))
 		}
-		overflow := watchSetEvent(DefaultWatchBufferSize + 2)
+		overflow := watchSetEvent(defaultWatchBufferSize + 2)
 		s.notifyWatchers(overflow)
 		require.Equal(t, overflow, nextWatchSetEvent(t, healthy))
 		synctest.Wait()
@@ -195,7 +169,7 @@ func TestWatchSetClosesOverflowingWatchWithoutInterruptingHealthyWatch(t *testin
 
 		slow.Stop()
 		slow.Stop()
-		ev := watchSetEvent(DefaultWatchBufferSize + 3)
+		ev := watchSetEvent(defaultWatchBufferSize + 3)
 		s.notifyWatchers(ev)
 		require.Equal(t, ev, nextWatchSetEvent(t, healthy))
 	})
@@ -271,7 +245,7 @@ func TestWatchSetUnmatchedTrafficDoesNotCloseWatchOrAppearInResults(t *testing.T
 				w := startTestWatch(t, s, p, []watch.Event{watchSetEvent(0), watchSetEvent(1)})
 				synctest.Wait()
 
-				for i := range DefaultWatchBufferSize + 1 {
+				for i := range defaultWatchBufferSize + 1 {
 					ev := watchSetEvent(i + 2)
 					obj := ev.Object.(*metav1.PartialObjectMetadata)
 					obj.Name = "unrelated"
@@ -295,8 +269,8 @@ func TestWatchSetConcurrentPublicationAndRepeatedStopComplete(t *testing.T) {
 		var workers sync.WaitGroup
 		for i := range 20 {
 			workers.Go(func() {
-				for j := range DefaultWatchBufferSize + 1 {
-					s.notifyWatchers(watchSetEvent(i*DefaultWatchBufferSize + j))
+				for j := range defaultWatchBufferSize + 1 {
+					s.notifyWatchers(watchSetEvent(i*defaultWatchBufferSize + j))
 				}
 			})
 			workers.Go(w.Stop)

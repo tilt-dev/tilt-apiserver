@@ -20,3 +20,10 @@ func PublicationLockRefsForTest(storage rest.Storage, ctx context.Context, name 
 	}
 	return entry.refs
 }
+
+// Set the watch queue to a smaller size for testing.
+func (s *WatchSet) SetBufferSizeForTest(size int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bufferSize = size
+}

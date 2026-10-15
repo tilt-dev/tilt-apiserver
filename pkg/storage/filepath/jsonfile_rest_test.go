@@ -202,6 +202,9 @@ func TestFilepathREST_StalledWatchDoesNotBlockMutationsOrSiblingStop(t *testing.
 	synctest.Test(t, func(t *testing.T) {
 		f := newRESTFixture(t)
 		defer f.tearDown()
+
+		const watchBacklog = 8
+		f.watchSet.SetBufferSizeForTest(watchBacklog)
 		f.mustCreate(&v1alpha1.Manifest{ObjectMeta: metav1.ObjectMeta{Name: "test-obj"}})
 
 		slow := f.watch("test-obj")
@@ -220,7 +223,8 @@ func TestFilepathREST_StalledWatchDoesNotBlockMutationsOrSiblingStop(t *testing.
 		synctest.Wait()
 		f.waitForWatchClose(sibling)
 
-		const updateCount = 2 * filepath.DefaultWatchBufferSize
+		// Comfortably more than the slow watch can still buffer.
+		const updateCount = 2 * watchBacklog
 		for i := range updateCount {
 			f.mustUpdate("test-obj", func(obj runtime.Object) {
 				obj.(*v1alpha1.Manifest).Spec.Message = fmt.Sprint(i)
