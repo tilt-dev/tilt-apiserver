@@ -18,6 +18,7 @@ package builder
 
 import (
 	"flag"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -62,13 +63,14 @@ func NewServerBuilder() *Server {
 	openapiScheme := apiserver.NewScheme()
 
 	return &Server{
-		stdout:        os.Stdout,
-		stderr:        os.Stderr,
-		apiScheme:     apiScheme,
-		openapiScheme: openapiScheme,
-		codecs:        serializer.NewCodecFactory(apiScheme),
-		storage:       map[schema.GroupResource]*singletonProvider{},
-		apis:          map[schema.GroupVersionResource]apiserver.StorageProvider{},
+		stdout:          os.Stdout,
+		stderr:          os.Stderr,
+		apiScheme:       apiScheme,
+		openapiScheme:   openapiScheme,
+		codecs:          serializer.NewCodecFactory(apiScheme),
+		storage:         map[schema.GroupResource]*singletonProvider{},
+		apis:            map[schema.GroupVersionResource]apiserver.StorageProvider{},
+		watchBufferSize: filepath.DefaultWatchBufferSize,
 		serving: &options.SecureServingOptions{
 			BindAddress: net.ParseIP("127.0.0.1"),
 		},
@@ -95,9 +97,20 @@ type Server struct {
 	orderedGroupVersions []schema.GroupVersion
 	serving              *options.SecureServingOptions
 	connProvider         apiserver.ConnProvider
+	watchBufferSize      int
+	watchSets            []*filepath.WatchSet
 }
 
 func (a *Server) buildCodec() (runtime.Codec, error) {
+	if a.watchBufferSize <= 0 {
+		return nil, fmt.Errorf("watch buffer size must be positive: %d", a.watchBufferSize)
+	}
+	for _, ws := range a.watchSets {
+		if err := ws.SetBufferSize(a.watchBufferSize); err != nil {
+			return nil, err
+		}
+	}
+
 	registerGroupVersions := func(scheme *runtime.Scheme) error {
 		groupVersions := make(map[string]sets.String)
 		for gvr := range a.apis {
