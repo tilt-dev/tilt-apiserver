@@ -257,7 +257,12 @@ func TestWatchLotsOfServers(t *testing.T) {
 	}
 }
 
-func TestConfiguredWatchBufferClosesStalledWatchAndAllowsRestart(t *testing.T) {
+// Comfortably more mutations than a single watch will buffer. The server's
+// backlog size is deliberately not exported, so this is an upper bound rather
+// than the exact figure.
+const watchBacklogOverflow = 150
+
+func TestStalledWatchIsClosedAndCanBeRestarted(t *testing.T) {
 	for _, storageKind := range []string{"file", "memory"} {
 		t.Run(storageKind, func(t *testing.T) {
 			b := builder.NewServerBuilder()
@@ -266,7 +271,7 @@ func TestConfiguredWatchBufferClosesStalledWatchAndAllowsRestart(t *testing.T) {
 			} else {
 				b.WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data")
 			}
-			f := newFixtureWithBuilder(t, b.WithWatchBufferSize(1))
+			f := newFixtureWithBuilder(t, b)
 			defer f.tearDown()
 			client := f.client.CoreV1alpha1().Manifests()
 			obj, err := client.Create(f.ctx, &corev1alpha1.Manifest{
@@ -278,14 +283,24 @@ func TestConfiguredWatchBufferClosesStalledWatchAndAllowsRestart(t *testing.T) {
 			defer w.Stop()
 			f.nextResult(w)
 
-			// Large events make the unread client fall behind despite transport buffering.
-			message := strings.Repeat("x", 1<<20)
-			for i := 0; i < 20; i++ {
-				obj.Status.Message = message + fmt.Sprint(i)
-				ctx, cancel := context.WithTimeout(f.ctx, 10*time.Second)
+			update := func(message string) {
+				ctx, cancel := context.WithTimeout(f.ctx, 30*time.Second)
+				defer cancel()
+				obj.Status.Message = message
 				obj, err = client.UpdateStatus(ctx, obj, metav1.UpdateOptions{})
-				cancel()
 				require.NoError(t, err)
+			}
+
+			// First make this client unable to receive at all.
+			filler := strings.Repeat("x", 2<<20)
+			for i := 0; i < 4; i++ {
+				update(filler + fmt.Sprint(i))
+			}
+
+			// With nothing able to reach the client, cheap mutations are enough
+			// to overrun the server's per-watch backlog.
+			for i := 0; i < watchBacklogOverflow; i++ {
+				update(fmt.Sprint(i))
 			}
 
 			watchClosed := false
@@ -306,29 +321,6 @@ func TestConfiguredWatchBufferClosesStalledWatchAndAllowsRestart(t *testing.T) {
 			require.Equal(t, obj.Status.Message, f.nextResult(restarted).Status.Message)
 		})
 	}
-}
-
-func TestWatchBufferSizeRejectsNonpositiveCapacity(t *testing.T) {
-	for _, capacity := range []int{0, -1} {
-		t.Run(fmt.Sprint(capacity), func(t *testing.T) {
-			b := builder.NewServerBuilder().
-				WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
-				WithWatchBufferSize(capacity)
-			_, err := b.ToServerOptions()
-			require.ErrorContains(t, err, "watch buffer size must be positive")
-			_, err = b.ToServerCommand()
-			require.ErrorContains(t, err, "watch buffer size must be positive")
-		})
-	}
-}
-
-func TestWatchBufferSizeAcceptsFinalValidSetting(t *testing.T) {
-	b := builder.NewServerBuilder().
-		WithWatchBufferSize(0).
-		WithResourceMemoryStorage(&corev1alpha1.Manifest{}, "data").
-		WithWatchBufferSize(7)
-	_, err := b.ToServerOptions()
-	require.NoError(t, err)
 }
 
 func TestUpdateSpectDoesNotUpdateStatus(t *testing.T) {

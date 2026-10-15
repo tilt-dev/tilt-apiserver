@@ -595,8 +595,10 @@ func (f *filepathREST) Watch(ctx context.Context, options *metainternalversion.L
 		return initEvents, nil
 	}
 
-	startErr := jw.Start(p, getInitEvents)
-	return jw, startErr
+	if err := jw.Start(p, getInitEvents); err != nil {
+		return nil, err
+	}
+	return jw, nil
 }
 
 func (f *filepathREST) conflictErr(name string) error {

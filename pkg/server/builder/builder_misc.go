@@ -16,14 +16,6 @@ func (a *Server) WithBindPort(port int) *Server {
 	return a
 }
 
-// WithWatchBufferSize sets the per-watcher live-event capacity for file and memory storage.
-// It may be called before or after resource registration, but must be called before
-// building the server. Nonpositive values are reported as server build errors.
-func (a *Server) WithWatchBufferSize(bufferSize int) *Server {
-	a.watchBufferSize = bufferSize
-	return a
-}
-
 // WithConnProvider registers a provider of connections.
 //
 // If this is set, the server will use this listener and dialer instead of a network host/port.
